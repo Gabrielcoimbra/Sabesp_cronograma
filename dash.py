@@ -184,9 +184,11 @@ def fig_barras_por_dia():
 
 def fig_acumulado():
     fig = go.Figure(go.Scatter(
-        x=dia_sorted["data_str"], y=dia_sorted["acumulado"],
-        mode="lines+markers", line=dict(width=3), marker=dict(size=8),
-        line=dict(color=COR_SEC)
+        x=dia_sorted["data_str"], 
+        y=dia_sorted["acumulado"],
+        mode="lines+markers", 
+        line=dict(width=3, color=COR_SEC),   # ✅ junta largura e cor
+        marker=dict(size=8)
     ))
     fig.update_layout(
         title="Acumulado de Ultronlines Instalados",
@@ -194,6 +196,7 @@ def fig_acumulado():
         plot_bgcolor=COR_BG, paper_bgcolor=COR_BG, font=dict(color=COR_TXT, size=14)
     )
     return fig
+
 
 def fig_cidade():
     colors = [cores_2neuron[i % len(cores_2neuron)] for i in range(len(cidade_dist))]
