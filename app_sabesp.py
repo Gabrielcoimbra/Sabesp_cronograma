@@ -1,5 +1,6 @@
 # streamlit_app.py
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.io as pio
@@ -12,14 +13,15 @@ COR_BG = "#F8F8FF"
 COR_TXT = "#2D2D2D"
 COR_PRI = cores_2neuron[0]
 COR_SEC = cores_2neuron[1]
+COR_ALERTA = "#E76F51"
 
-# Garante que o Plotly não varie com o tema do Streamlit
-pio.templates.default = "plotly_white"
+# Não herdar temas globais do Plotly
+pio.templates.default = None
 BASE_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
 
 st.set_page_config(page_title="Instalações 2Neuron | Sabesp", layout="wide")
 
-# CSS para fixar fundos e fonte global (independente do tema do visitante)
+# CSS global para fundo e fontes (independe do tema do visitante)
 st.markdown(
     f"""
     <style>
@@ -30,13 +32,24 @@ st.markdown(
       }}
       .block-container {{
         padding-top: 1rem; padding-bottom: 1rem; background: {COR_BG};
-        color: {COR_TXT};
       }}
       h1,h2,h3,h4,h5,h6 {{ color: {COR_PRI}; font-family: {BASE_FONT}; }}
     </style>
     """,
     unsafe_allow_html=True
 )
+
+# ===== Helper para renderizar Plotly 100% isolado do tema do Streamlit =====
+def render_plotly(fig, height=420):
+    # Garante que NENHUM template externo seja usado
+    fig.update_layout(template=None)
+    # Exporta HTML autocontido (usa plotlyjs via CDN)
+    html = fig.to_html(include_plotlyjs="cdn", full_html=False, config={
+        "responsive": True,
+        "displaylogo": False,
+        "modeBarButtonsToRemove": ["select2d", "lasso2d", "autoScale2d"]
+    })
+    components.html(html, height=height, scrolling=False)
 
 # ============================================================
 # INVENTÁRIO TÉCNICO (37 instalados)
@@ -71,9 +84,9 @@ inv_rows = [
     ("EEE CRISTO","Ubatuba","Rua Raimundo Corrêa - Itaguá - Ubatuba - SP - 11688-622","23°27'19.3\"S 45°04'00.6\"W","CLARO / VIVO","100","","100","440","","1790","","","1","Inversor","U2N000290","GW000113"),
     ("EEE TINGA POIARES","Caraguatatuba","Av. Mal. Floriano Peixoto - Poiares - Caraguatatuba - SP - 11660-497","23°38'19.1\"S 45°26'15.6\"W","CLARO / VIVO","","75","125","440","","1173","","","1","Inversor","U2N000301","GW000118"),
     ("EEE TINGA POIARES","Caraguatatuba","Av. Mal. Floriano Peixoto - Poiares - Caraguatatuba - SP - 11660-497","23°38'19.1\"S 45°26'15.6\"W","CLARO / VIVO","","55","95","440","","1166","","","1","Inversor","U2N000304","GW000118"),
-    ("EEE TINGA POIARES","Caraguatatuba","Av. Mal. Floriano Peixoto - Poiares - Caraguatatuba - SP - 11660-497","23°38'19.1\"S 45°26'15.6\"W","CLARO / VIVO","","55","98","440","","696","","","1","Inversor","U2N000309","GW000118"),
-    ("EEE FINAL PORTO NOVO","Caraguatatuba","Rua Ângela Maria Ferreira e Santos - Barranco Alto - Caraguatatuba - SP - 11660-497","23°38'19.1\"S 45°26'15.6\"W","CLARO / VIVO","150","110","215","440","","1160","","","1","Inversor","U2N000312","GW000121"),
-    ("EEE FINAL PORTO NOVO","Caraguatatuba","Rua Ângela Maria Ferreira e Santos - Barranco Alto - Caraguatatuba - SP - 11660-497","23°38'19.1\"S 45°26'15.6\"W","CLARO / VIVO","100","75","129","440","","1160","","","1","Inversor","U2N000298","GW000121"),
+    ("EEE TINGA POIARES","Caraguatatuba","Av. Mal. Floriano Peixoto - Poiares - Caraguatatuba - SP - 11660-497","CLARO / VIVO","","55","98","440","","696","","","1","Inversor","U2N000309","GW000118"),
+    ("EEE FINAL PORTO NOVO","Caraguatatuba","Rua Ângela Maria Ferreira e Santos - Barranco Alto - Caraguatatuba - SP - 11660-497","CLARO / VIVO","150","110","215","440","","1160","","","1","Inversor","U2N000312","GW000121"),
+    ("EEE FINAL PORTO NOVO","Caraguatatuba","Rua Ângela Maria Ferreira e Santos - Barranco Alto - Caraguatatuba - SP - 11660-497","CLARO / VIVO","100","75","129","440","","1160","","","1","Inversor","U2N000298","GW000121"),
     ("EEE JARDIM IKEDA","Suzano","Rua Flores de Narciso - Jardim Ikeda - Suzano - SP - 08613-035","","CLARO","","110","185,45","440","","1776","","","1","Inversor","U2N000308","Sem Gateway"),
     ("EEE PLANALTO","Suzano","Estr. da Boracéia - Jardim Ikeda - Suzano - SP - 08640-115","23°38'05.9\"S 46°19'17.3\"","","","132","211,2","440","","1776","","","1","Inversor","U2N000306","GW000120"),
     ("EEE SUZANO 1","Suzano","(não informado)","","","","","","","","","","","Inversor","U2N000302",""),
@@ -178,13 +191,12 @@ cidade_dist = (df_inv.groupby("Cidade", as_index=False)["Série"].count()
                .rename(columns={"Série":"Ultronlines"}))
 
 # ============================================================
-# Figuras (Plotly) — layout padrão fixo
+# Figuras (com todas as cores definidas)
 # ============================================================
 BASE_LAYOUT = dict(
     paper_bgcolor=COR_BG,
     plot_bgcolor=COR_BG,
     font=dict(color=COR_TXT, size=14, family=BASE_FONT),
-    colorway=cores_2neuron
 )
 
 def fig_barras_por_dia():
@@ -193,7 +205,7 @@ def fig_barras_por_dia():
         y=dia_sorted["ultronlines_dia"],
         text=dia_sorted["ultronlines_dia"],
         textposition="auto",
-        marker_color=COR_PRI
+        marker=dict(color=COR_PRI)
     ))
     fig.update_layout(title="Ultronlines Instalados por Dia",
                       xaxis_title="Data", yaxis_title="Quantidade", **BASE_LAYOUT)
@@ -201,11 +213,11 @@ def fig_barras_por_dia():
 
 def fig_acumulado():
     fig = go.Figure(go.Scatter(
-        x=dia_sorted["data_str"], 
+        x=dia_sorted["data_str"],
         y=dia_sorted["acumulado"],
         mode="lines+markers",
         line=dict(width=3, color=COR_SEC),
-        marker=dict(size=8)
+        marker=dict(size=8, color=COR_SEC)
     ))
     fig.update_layout(title="Acumulado de Ultronlines Instalados",
                       xaxis_title="Data", yaxis_title="Acumulado", **BASE_LAYOUT)
@@ -215,7 +227,8 @@ def fig_cidade():
     colors = [cores_2neuron[i % len(cores_2neuron)] for i in range(len(cidade_dist))]
     fig = go.Figure(go.Bar(
         x=cidade_dist["Cidade"], y=cidade_dist["Ultronlines"],
-        text=cidade_dist["Ultronlines"], textposition="auto", marker_color=colors
+        text=cidade_dist["Ultronlines"], textposition="auto",
+        marker=dict(color=colors)
     ))
     fig.update_layout(title="Distribuição por Cidade (Inventário)",
                       xaxis_title="Cidade", yaxis_title="Ultronlines", **BASE_LAYOUT)
@@ -224,8 +237,8 @@ def fig_cidade():
 def fig_status():
     fig = go.Figure(go.Pie(
         labels=["Online","Offline"], values=[TOTAL_ONLINE, TOTAL_OFFLINE],
-        marker=dict(colors=[COR_PRI, "#E76F51"]), hole=0.5,
-        sort=False
+        marker=dict(colors=[COR_PRI, COR_ALERTA]),
+        hole=0.5, sort=False, textfont=dict(color=COR_TXT, family=BASE_FONT)
     ))
     fig.update_layout(title="Status dos Ultronlines (37 instalados)", **BASE_LAYOUT)
     return fig
@@ -245,18 +258,18 @@ with c2:
 with c3:
     st.metric("Offline", TOTAL_OFFLINE, help="277 (Talamanca) e 308 (Jardim Ikeda)")
 
-# Tema do Streamlit DESLIGADO nos charts (garante consistência)
+# Gráficos (renderizados como HTML independente)
 g1, g2 = st.columns(2)
 with g1:
-    st.plotly_chart(fig_barras_por_dia(), use_container_width=True, theme="none")
+    render_plotly(fig_barras_por_dia())
 with g2:
-    st.plotly_chart(fig_acumulado(), use_container_width=True, theme="none")
+    render_plotly(fig_acumulado())
 
 g3, g4 = st.columns(2)
 with g3:
-    st.plotly_chart(fig_cidade(), use_container_width=True, theme="none")
+    render_plotly(fig_cidade())
 with g4:
-    st.plotly_chart(fig_status(), use_container_width=True, theme="none")
+    render_plotly(fig_status(), height=430)
 
 # Tabelas
 st.subheader("Detalhamento diário (cronograma)")
