@@ -1,5 +1,6 @@
 # streamlit_app.py
 import io
+import math
 import pandas as pd
 import streamlit as st
 from PIL import Image
@@ -25,23 +26,35 @@ pio.templates.default = None
 
 st.set_page_config(page_title="Instalações 2Neuron | Sabesp", layout="wide")
 
-# CSS para blindar fundo e tipografia (inclusive em modo dark do SO)
+# CSS: força tema claro e texto escuro em toda a UI (mesmo com dark mode do SO)
 st.markdown(
     f"""
     <style>
-      :root {{ color-scheme: only light; }}
+      :root {{ color-scheme: light; }}
       html, body, [data-testid="stAppViewContainer"] {{
         background: {COR_BG} !important; color: {COR_TXT} !important;
         font-family: {BASE_FONT};
       }}
-      .block-container {{ padding-top: 1rem; padding-bottom: 1rem; background: {COR_BG}; }}
-      h1,h2,h3,h4,h5,h6 {{ color: {COR_PRI}; font-family: {BASE_FONT}; }}
+      .block-container {{
+        padding-top: 1rem; padding-bottom: 1rem; background: {COR_BG};
+      }}
+      h1,h2,h3,h4,h5,h6, p, span, div, li, label, code, pre, small, strong, em {{
+        color: {COR_TXT} !important; text-shadow: none !important;
+      }}
+      /* Métricas */
+      [data-testid="stMetricValue"], [data-testid="stMetricLabel"], [data-testid="stMetricDelta"] {{
+        color: {COR_TXT} !important;
+      }}
+      /* Cabeçalho */
+      [data-testid="stHeader"] {{ background: {COR_BG} !important; }}
+      /* Links */
+      a, a:link, a:visited {{ color: {COR_PRI} !important; }}
     </style>
     """,
     unsafe_allow_html=True
 )
 
-# ---------- Funções utilitárias ----------
+# ---------- Utilitários ----------
 BASE_LAYOUT = dict(
     paper_bgcolor=COR_BG,
     plot_bgcolor=COR_BG,
@@ -58,23 +71,48 @@ def apply_axes_style(fig):
     )
 
 def fig_to_png(fig, width=1100, height=420, scale=3):
-    """Renderiza a figura como PNG no servidor (100% imutável para o cliente)."""
-    # Garante layout fechado
+    """Renderiza a figura como PNG no servidor (imutável no cliente). Requer 'kaleido'."""
     fig.update_layout(template=None)
-    img_bytes = fig.to_image(format="png", width=width, height=height, scale=scale)  # requer 'kaleido'
+    img_bytes = fig.to_image(format="png", width=width, height=height, scale=scale)  # kaleido
     return Image.open(io.BytesIO(img_bytes))
 
-def safe_show(fig, height=420):
-    """Tenta exibir como PNG; se Kaleido não estiver disponível, cai para interativo."""
+def safe_show(fig, width=1100, height=420):
     try:
-        img = fig_to_png(fig, height=height)
-        st.image(img, use_container_width=True)
-    except Exception as e:
-        st.warning(
-            "Exibindo versão interativa porque o pacote 'kaleido' não está disponível "
-            "(adicione 'kaleido' ao requirements.txt para travar 100%)."
+        st.image(fig_to_png(fig, width=width, height=height), use_container_width=True)
+    except Exception:
+        st.plotly_chart(fig, use_container_width=True, theme="none")  # fallback se kaleido faltar
+
+def plotly_table(df: pd.DataFrame, title: str, max_height_px: int = 760):
+    """Tabela determinística (PNG)."""
+    # Converte tudo para string p/ evitar formatação inconsistente
+    df_str = df.copy().astype(str)
+    header_vals = list(df_str.columns)
+    cell_vals = [df_str[c].tolist() for c in df_str.columns]
+
+    fig = go.Figure(data=[go.Table(
+        header=dict(
+            values=header_vals,
+            fill_color="#FFFFFF",
+            line_color="#DDDDDD",
+            align="left",
+            font=dict(color=COR_TXT, size=13, family=BASE_FONT),
+            height=32
+        ),
+        cells=dict(
+            values=cell_vals,
+            fill_color="#FFFFFF",
+            line_color="#EEEEEE",
+            align="left",
+            font=dict(color=COR_TXT, size=12, family=BASE_FONT),
+            height=28
         )
-        st.plotly_chart(fig, use_container_width=True, theme="none")
+    )])
+    fig.update_layout(title=title, **BASE_LAYOUT)
+
+    # Altura proporcional ao nº de linhas (com limite)
+    rows = len(df_str)
+    height = min(max_height_px, 120 + rows * 28)
+    safe_show(fig, width=1200, height=height)
 
 # ============================================================
 # INVENTÁRIO TÉCNICO (37 instalados)
@@ -214,7 +252,7 @@ cidade_dist = (df_inv.groupby("Cidade", as_index=False)["Série"].count()
                .rename(columns={"Série":"Ultronlines"}))
 
 # ============================================================
-# Figuras (tudo com cor explícita + estilo de eixos)
+# Figuras (tudo com cor explícita + eixos)
 # ============================================================
 def fig_barras_por_dia():
     fig = go.Figure(go.Bar(
@@ -282,34 +320,25 @@ g3, g4 = st.columns(2)
 with g3: safe_show(fig_cidade())
 with g4: safe_show(fig_status(), height=430)
 
-st.subheader("Detalhamento diário (cronograma)")
-df_crono = (df[["data","cidade","local","ultronlines","ultronlinks","gateways_extra","obs"]]
-            .sort_values(["data","cidade","local"])
-            .rename(columns={
-                "data":"Data","cidade":"Cidade","local":"Local",
-                "ultronlines":"Ultronlines","ultronlinks":"Ultronlinks","gateways_extra":"Gateways extra",
-                "obs":"Observações"
-            }))
-st.dataframe(df_crono, use_container_width=True, hide_index=True)
+# Tabelas como PNG determinístico
+plotly_table(
+    df[["data","cidade","local","ultronlines","ultronlinks","gateways_extra","obs"]]
+      .sort_values(["data","cidade","local"])
+      .rename(columns={"data":"Data","cidade":"Cidade","local":"Local",
+                       "ultronlines":"Ultronlines","ultronlinks":"Ultronlinks",
+                       "gateways_extra":"Gateways extra","obs":"Observações"}),
+    title="Detalhamento diário (cronograma)"
+)
 
-st.subheader("Séries instaladas e status (37)")
 df_series_view = (df_series
                   .sort_values(["Online","Data","Série"], ascending=[False, True, True])
                   .assign(Status=lambda x: x["Online"].map({True:"Online", False:"Offline"}))
                   [["Série","Status","Data","Cidade","Local","Gateway"]])
-st.dataframe(df_series_view, use_container_width=True, hide_index=True)
+plotly_table(df_series_view, title="Séries instaladas e status (37)")
 
-st.subheader("Inventário técnico (campos principais)")
-df_inv_view = df_inv.rename(columns={
+df_inv_view = (df_inv.rename(columns={
     "Potência (cv)":"Pot (cv)","Potência (kW)":"Pot (kW)","Corrente (A)":"Corr (A)",
     "Tensão (V)":"Tensão (V)","Rotação (RPM)":"RPM","Seção Cabo (mm²)":"Seção (mm²)",
     "Diâm. externo (mm)":"Diâm (mm)","Cabos/fase":"Cabos/fase"
-})[["Local","Cidade","Série","Gateway","Operadora","Acionamento","Pot (cv)","Pot (kW)","Corr (A)","Tensão (V)","RPM","Seção (mm²)","Diâm (mm)","Cabos/fase","Endereço","Coordenadas","Online"]]
-st.dataframe(df_inv_view, use_container_width=True, hide_index=True)
-
-st.markdown(
-    f"<span style='color:{COR_TXT};opacity:0.8;'>"
-    "Observação: 11/08 = 4 (inclui 270 em Alvarenga Mãe) • 12/08 = 4 (269 e 288 em Lavapés)."
-    "</span>",
-    unsafe_allow_html=True
-)
+})[["Local","Cidade","Série","Gateway","Operadora","Acionamento","Potência (cv)","Potência (kW)","Corrente (A)","Tensão (V)","Rotação (RPM)","Seção Cabo (mm²)","Diâm. externo (mm)","Cabos/fase","Endereço","Coordenadas","Online"]])
+plotly_table(df_inv_view, title="Inventário técnico (campos principais)")
