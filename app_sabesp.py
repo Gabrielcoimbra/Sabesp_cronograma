@@ -1,6 +1,5 @@
 # streamlit_app.py
 import io
-import math
 import pandas as pd
 import streamlit as st
 from PIL import Image
@@ -21,40 +20,27 @@ ZERO = "#D0D0DF"
 AXIS = "#B0B0C0"
 BASE_FONT = "DejaVu Sans, Arial, Helvetica, sans-serif"
 
-# Desliga templates globais do Plotly para não herdar nada
+# Plotly sem template para não herdar nada
 pio.templates.default = None
 
 st.set_page_config(page_title="Instalações 2Neuron | Sabesp", layout="wide")
 
-# CSS: força tema claro e texto escuro em toda a UI (mesmo com dark mode do SO)
+# Fundo fixo (apenas layout; texto será definido inline nos elementos)
 st.markdown(
     f"""
     <style>
       :root {{ color-scheme: light; }}
       html, body, [data-testid="stAppViewContainer"] {{
-        background: {COR_BG} !important; color: {COR_TXT} !important;
+        background: {COR_BG} !important;
         font-family: {BASE_FONT};
       }}
-      .block-container {{
-        padding-top: 1rem; padding-bottom: 1rem; background: {COR_BG};
-      }}
-      h1,h2,h3,h4,h5,h6, p, span, div, li, label, code, pre, small, strong, em {{
-        color: {COR_TXT} !important; text-shadow: none !important;
-      }}
-      /* Métricas */
-      [data-testid="stMetricValue"], [data-testid="stMetricLabel"], [data-testid="stMetricDelta"] {{
-        color: {COR_TXT} !important;
-      }}
-      /* Cabeçalho */
-      [data-testid="stHeader"] {{ background: {COR_BG} !important; }}
-      /* Links */
-      a, a:link, a:visited {{ color: {COR_PRI} !important; }}
+      .block-container {{ padding-top: 1rem; padding-bottom: 1rem; }}
     </style>
     """,
     unsafe_allow_html=True
 )
 
-# ---------- Utilitários ----------
+# ---------- Utils: Plotly -> PNG (imutável no cliente) ----------
 BASE_LAYOUT = dict(
     paper_bgcolor=COR_BG,
     plot_bgcolor=COR_BG,
@@ -62,7 +48,7 @@ BASE_LAYOUT = dict(
     margin=dict(l=50, r=20, t=60, b=60)
 )
 
-def apply_axes_style(fig):
+def axes_style(fig):
     fig.update_layout(
         xaxis=dict(showgrid=True, gridcolor=GRID, zeroline=True, zerolinecolor=ZERO,
                    linecolor=AXIS, linewidth=1, mirror=True, ticks="outside"),
@@ -71,51 +57,33 @@ def apply_axes_style(fig):
     )
 
 def fig_to_png(fig, width=1100, height=420, scale=3):
-    """Renderiza a figura como PNG no servidor (imutável no cliente). Requer 'kaleido'."""
     fig.update_layout(template=None)
-    img_bytes = fig.to_image(format="png", width=width, height=height, scale=scale)  # kaleido
-    return Image.open(io.BytesIO(img_bytes))
+    img = fig.to_image(format="png", width=width, height=height, scale=scale)  # requer kaleido
+    return Image.open(io.BytesIO(img))
 
-def safe_show(fig, width=1100, height=420):
+def show(fig, width=1100, height=420):
     try:
         st.image(fig_to_png(fig, width=width, height=height), use_container_width=True)
     except Exception:
-        st.plotly_chart(fig, use_container_width=True, theme="none")  # fallback se kaleido faltar
+        # fallback se kaleido faltar
+        st.plotly_chart(fig, use_container_width=True, theme="none")
 
-def plotly_table(df: pd.DataFrame, title: str, max_height_px: int = 760):
-    """Tabela determinística (PNG)."""
-    # Converte tudo para string p/ evitar formatação inconsistente
-    df_str = df.copy().astype(str)
-    header_vals = list(df_str.columns)
-    cell_vals = [df_str[c].tolist() for c in df_str.columns]
-
+def table_png(df: pd.DataFrame, title: str, max_h_px: int = 760):
+    df = df.astype(str)
     fig = go.Figure(data=[go.Table(
-        header=dict(
-            values=header_vals,
-            fill_color="#FFFFFF",
-            line_color="#DDDDDD",
-            align="left",
-            font=dict(color=COR_TXT, size=13, family=BASE_FONT),
-            height=32
-        ),
-        cells=dict(
-            values=cell_vals,
-            fill_color="#FFFFFF",
-            line_color="#EEEEEE",
-            align="left",
-            font=dict(color=COR_TXT, size=12, family=BASE_FONT),
-            height=28
-        )
+        header=dict(values=list(df.columns), fill_color="#FFFFFF",
+                    line_color="#DDDDDD", align="left",
+                    font=dict(color=COR_TXT, size=13, family=BASE_FONT), height=32),
+        cells=dict(values=[df[c] for c in df.columns], fill_color="#FFFFFF",
+                   line_color="#EEEEEE", align="left",
+                   font=dict(color=COR_TXT, size=12, family=BASE_FONT), height=28)
     )])
     fig.update_layout(title=title, **BASE_LAYOUT)
-
-    # Altura proporcional ao nº de linhas (com limite)
-    rows = len(df_str)
-    height = min(max_height_px, 120 + rows * 28)
-    safe_show(fig, width=1200, height=height)
+    h = min(max_h_px, 120 + len(df) * 28)
+    show(fig, width=1200, height=h)
 
 # ============================================================
-# INVENTÁRIO TÉCNICO (37 instalados)
+# DADOS (iguais ao que você enviou)
 # ============================================================
 inv_rows = [
     ("EEE ALVARENGA MÃE","São Paulo","Praça Clóvis Beviláqua - Glicério - São Paulo - SP - 01018-001","23°41'43.5\"S 46°39'06.2\"W","", "120","88","145","440","","1764","","22","1","Soft Starter","U2N000287","GW000103"),
@@ -127,34 +95,34 @@ inv_rows = [
     ("EEE INTERLAGOS 3","São José dos Campos","Rua João Miacci - Pq. Interlagos - SJC - SP","23°16'33.1\"S 45°52'39.6\"W","CLARO / VIVO","75","","185","220","","1737","","","1","Soft Starter","U2N000278","GW000105"),
     ("EEE INTERLAGOS 2","São José dos Campos","Rua Alexandre Teodoro Eras - Pq. Interlagos - SJC - SP","23°16'25.1\"S 45°52'04.2\"W","CLARO / VIVO","40","","103","220","","1737","","","1","Soft Starter","U2N000286","GW000106"),
     ("EEE DAVIDE","São Paulo","Rua Davide Perez - Pedreira - São Paulo - SP - 04470-080","23°42'23.7\"S 46°39'13.3\"W","", "50","37","65","440","","1778","","12","1","Soft Starter","U2N000272","GW000108"),
-    ("EEE DAVIDE","São Paulo","Rua Davide Perez - Pedreira - São Paulo - SP - 04470-080","23°42'23.7\"S 46°39'13.3\"W","", "50","37","65","440","","1778","","12","1","Soft Starter","U2N000285","GW000108"),
-    ("EEE TALAMANCA","São Paulo","Rua Talamanca - Jardim São Luís - São Paulo - SP - 04917-080","23°41'26.9\"S 46°44'57.0\"W","", "250","183","324","440","","1750","","","2","Soft Starter","U2N000279","GW000110"),
-    ("EEE TALAMANCA","São Paulo","Rua Talamanca - Jardim São Luís - São Paulo - SP - 04917-080","23°41'26.9\"S 46°44'57.0\"W","", "250","183","324","440","","1750","","","2","Soft Starter","U2N000268","GW000110"),
-    ("EEE TALAMANCA","São Paulo","Rua Talamanca - Jardim São Luís - São Paulo - SP - 04917-080","23°41'26.9\"S 46°44'57.0\"W","", "250","183","324","440","","1750","","","2","Soft Starter","U2N000277","GW000110"),
-    ("EEE IPORÃ","São Paulo","Estr. Ecoturística de Parelheiros - Jardim Iporã - São Paulo - SP - 04864-050","23°46'51.6\"S 46°43'30.2\"W","", "150","110","177,1","440","","1749","","","1","Soft Starter","U2N000271","GW000102"),
-    ("EEE IPORÃ","São Paulo","Estr. Ecoturística de Parelheiros - Jardim Iporã - São Paulo - SP - 04864-050","23°46'51.6\"S 46°43'30.2\"W","", "150","110","177,1","440","","1749","","","1","Soft Starter","U2N000274","GW000102"),
-    ("EEE VARGEM GRANDE","São Paulo","Rua Coqueiros - Vargem Grande - São Paulo - SP - 04896-260","23°51'48.1\"S 46°42'25.3\"W","", "120","90","145","440","","1770","","12","1","Soft Starter","U2N000275","GW000109"),
-    ("EEE CAULIM","São Paulo","Av. Hideo Tiba - Sul Brasil - SP - 18180-000","23°47'35.9\"S 46°43'49.7\"W","", "83","61","240","440","","1750","","15","1","Soft Starter","U2N000276","GW000107"),
-    ("EEE RIVIERA","São Paulo","Riviera - Bertioga - SP - 11262-015","23°41'53.6\"S 46°45'21.2\"W","", "180","132","211","440","","1760","","","1","Soft Starter","U2N000280","GW000111"),
-    ("EEE RIVIERA","São Paulo","Riviera - Bertioga - SP - 11262-015","23°41'53.6\"S 46°45'21.2\"W","", "180","132","211","440","","1760","","","1","Soft Starter","U2N000281","GW000111"),
-    ("EEE EUSÉBIO","Franco da Rocha","Av. Israel, 7A - Vila Bela - Franco da Rocha - SP - 07847-200","23°19'57.7\"S 46°43'40.6\"W","", "","200","312","440","","1180","","","2","Inversor","U2N000293","GW000112"),
-    ("EEE ÁGUA PRETA 1","Pindamonhangaba","Est. Benedicta Amélia Baptista - Água Preta - Pinda - SP","22°54'45.2\"S 45°25'22.2\"W","CLARO / VIVO","45","","64","380","","1770","","","1","Soft Starter","U2N000311","GW000114"),
-    ("EEE ÁGUA PRETA 1","Pindamonhangaba","Est. Benedicta Amélia Baptista - Água Preta - Pinda - SP","22°54'45.2\"S 45°25'22.2\"W","CLARO / VIVO","45","","64","380","","1770","","","1","Soft Starter","U2N000297","GW000114"),
-    ("EEE CONVENTO","Tremembé","Rua Pindamonhangaba - Pq. das Araucárias - Tremembé - SP","-22.990850, -45.553036","CLARO / VIVO","85","","125","380","","1172","","","1","Soft Starter","U2N000307","GW000116"),
-    ("EEE CONVENTO","Tremembé","Rua Pindamonhangaba - Pq. das Araucárias - Tremembé - SP","-22.990850, -45.553036","CLARO / VIVO","85","","125","380","","1172","","","1","Soft Starter","U2N000310","GW000116"),
-    ("EEE DA PONTE","São Luiz do Paraitinga","Rua Pedro Cascardi - SLP - SP","-23.236783, -45.305113","CLARO / VIVO","23","","74","220","","1750","","","1","Soft Starter","U2N000300","GW000115"),
-    ("EEE CRISTO","Ubatuba","Rua Raimundo Corrêa - Itaguá - Ubatuba - SP - 11688-622","23°27'19.3\"S 45°04'00.6\"W","CLARO / VIVO","100","","100","440","","1790","","","1","Inversor","U2N000295","GW000113"),
-    ("EEE CRISTO","Ubatuba","Rua Raimundo Corrêa - Itaguá - Ubatuba - SP - 11688-622","23°27'19.3\"S 45°04'00.6\"W","CLARO / VIVO","100","","100","440","","1790","","","1","Inversor","U2N000290","GW000113"),
-    ("EEE TINGA POIARES","Caraguatatuba","Av. Mal. Floriano Peixoto - Poiares - Caraguatatuba - SP - 11660-497","23°38'19.1\"S 45°26'15.6\"W","CLARO / VIVO","","75","125","440","","1173","","","1","Inversor","U2N000301","GW000118"),
-    ("EEE TINGA POIARES","Caraguatatuba","Av. Mal. Floriano Peixoto - Poiares - Caraguatatuba - SP - 11660-497","23°38'19.1\"S 45°26'15.6\"W","CLARO / VIVO","","55","95","440","","1166","","","1","Inversor","U2N000304","GW000118"),
-    ("EEE TINGA POIARES","Caraguatatuba","Av. Mal. Floriano Peixoto - Poiares - Caraguatatuba - SP - 11660-497","CLARO / VIVO","","55","98","440","","696","","","1","Inversor","U2N000309","GW000118"),
-    ("EEE FINAL PORTO NOVO","Caraguatatuba","Rua Ângela Maria Ferreira e Santos - Barranco Alto - Caraguatatuba - SP - 11660-497","CLARO / VIVO","150","110","215","440","","1160","","","1","Inversor","U2N000312","GW000121"),
-    ("EEE FINAL PORTO NOVO","Caraguatatuba","Rua Ângela Maria Ferreira e Santos - Barranco Alto - Caraguatatuba - SP - 11660-497","CLARO / VIVO","100","75","129","440","","1160","","","1","Inversor","U2N000298","GW000121"),
-    ("EEE JARDIM IKEDA","Suzano","Rua Flores de Narciso - Jardim Ikeda - Suzano - SP - 08613-035","","CLARO","","110","185,45","440","","1776","","","1","Inversor","U2N000308","Sem Gateway"),
-    ("EEE PLANALTO","Suzano","Estr. da Boracéia - Jardim Ikeda - Suzano - SP - 08640-115","23°38'05.9\"S 46°19'17.3\"","","","132","211,2","440","","1776","","","1","Inversor","U2N000306","GW000120"),
-    ("EEE SUZANO 1","Suzano","(não informado)","","","","","","","","","","","Inversor","U2N000302",""),
-    ("EEE VILA RAMOS","Franco da Rocha","Praça Antônio Teixeira - Vila Ramos - Franco da Rocha - SP - 07859-340","23°19'57.9\"S 46°42'44.3\"W","","60","45","88","380","","1775","","","1","Inversor","U2N000292","GW000119"),
-    ("EEE VILA RAMOS","Franco da Rocha","Praça Antônio Teixeira - Vila Ramos - Franco da Rocha - SP - 07859-340","23°19'57.9\"S 46°42'44.3\"W","","60","","82","380","","1775","","","1","Inversor","U2N000305","GW000119"),
+    ("EEE DAVIDE","São Paulo","Rua Davide Perez - Pedreira - São Paulo - SP - 04470-080","", "50","37","65","440","","1778","","12","1","Soft Starter","U2N000285","GW000108"),
+    ("EEE TALAMANCA","São Paulo","Rua Talamanca - Jardim São Luís - São Paulo - SP - 04917-080","", "250","183","324","440","","1750","","","2","Soft Starter","U2N000279","GW000110"),
+    ("EEE TALAMANCA","São Paulo","Rua Talamanca - Jardim São Luís - São Paulo - SP - 04917-080","", "250","183","324","440","","1750","","","2","Soft Starter","U2N000268","GW000110"),
+    ("EEE TALAMANCA","São Paulo","Rua Talamanca - Jardim São Luís - São Paulo - SP - 04917-080","", "250","183","324","440","","1750","","","2","Soft Starter","U2N000277","GW000110"),
+    ("EEE IPORÃ","São Paulo","Estr. Ecoturística de Parelheiros - Jardim Iporã - São Paulo - SP - 04864-050","", "150","110","177,1","440","","1749","","","1","Soft Starter","U2N000271","GW000102"),
+    ("EEE IPORÃ","São Paulo","Estr. Ecoturística de Parelheiros - Jardim Iporã - São Paulo - SP - 04864-050","", "150","110","177,1","440","","1749","","","1","Soft Starter","U2N000274","GW000102"),
+    ("EEE VARGEM GRANDE","São Paulo","Rua Coqueiros - Vargem Grande - São Paulo - SP - 04896-260","", "120","90","145","440","","1770","","12","1","Soft Starter","U2N000275","GW000109"),
+    ("EEE CAULIM","São Paulo","Av. Hideo Tiba - Sul Brasil - SP - 18180-000","", "83","61","240","440","","1750","","15","1","Soft Starter","U2N000276","GW000107"),
+    ("EEE RIVIERA","São Paulo","Riviera - Bertioga - SP - 11262-015","", "180","132","211","440","","1760","","","1","Soft Starter","U2N000280","GW000111"),
+    ("EEE RIVIERA","São Paulo","Riviera - Bertioga - SP - 11262-015","", "180","132","211","440","","1760","","","1","Soft Starter","U2N000281","GW000111"),
+    ("EEE EUSÉBIO","Franco da Rocha","Av. Israel, 7A - Vila Bela - Franco da Rocha - SP - 07847-200","", "","200","312","440","","1180","","","2","Inversor","U2N000293","GW000112"),
+    ("EEE ÁGUA PRETA 1","Pindamonhangaba","Est. Benedicta Amélia Baptista - Água Preta - Pinda - SP","", "45","","64","380","","1770","","","1","Soft Starter","U2N000311","GW000114"),
+    ("EEE ÁGUA PRETA 1","Pindamonhangaba","Est. Benedicta Amélia Baptista - Água Preta - Pinda - SP","", "45","","64","380","","1770","","","1","Soft Starter","U2N000297","GW000114"),
+    ("EEE CONVENTO","Tremembé","Rua Pindamonhangaba - Pq. das Araucárias - Tremembé - SP","", "85","","125","380","","1172","","","1","Soft Starter","U2N000307","GW000116"),
+    ("EEE CONVENTO","Tremembé","Rua Pindamonhangaba - Pq. das Araucárias - Tremembé - SP","", "85","","125","380","","1172","","","1","Soft Starter","U2N000310","GW000116"),
+    ("EEE DA PONTE","São Luiz do Paraitinga","Rua Pedro Cascardi - SLP - SP","", "23","","74","220","","1750","","","1","Soft Starter","U2N000300","GW000115"),
+    ("EEE CRISTO","Ubatuba","Rua Raimundo Corrêa - Itaguá - Ubatuba - SP - 11688-622","", "100","","100","440","","1790","","","1","Inversor","U2N000295","GW000113"),
+    ("EEE CRISTO","Ubatuba","Rua Raimundo Corrêa - Itaguá - Ubatuba - SP - 11688-622","", "100","","100","440","","1790","","","1","Inversor","U2N000290","GW000113"),
+    ("EEE TINGA POIARES","Caraguatatuba","Av. Mal. Floriano Peixoto - Poiares - Caraguatatuba - SP - 11660-497","", "","75","125","440","","1173","","","1","Inversor","U2N000301","GW000118"),
+    ("EEE TINGA POIARES","Caraguatatuba","Av. Mal. Floriano Peixoto - Poiares - Caraguatatuba - SP - 11660-497","", "","55","95","440","","1166","","","1","Inversor","U2N000304","GW000118"),
+    ("EEE TINGA POIARES","Caraguatatuba","Av. Mal. Floriano Peixoto - Poiares - Caraguatatuba - SP - 11660-497","", "","55","98","440","","696","","","1","Inversor","U2N000309","GW000118"),
+    ("EEE FINAL PORTO NOVO","Caraguatatuba","Rua Ângela Maria Ferreira e Santos - Barranco Alto - Caraguatatuba - SP - 11660-497","", "150","110","215","440","","1160","","","1","Inversor","U2N000312","GW000121"),
+    ("EEE FINAL PORTO NOVO","Caraguatatuba","Rua Ângela Maria Ferreira e Santos - Barranco Alto - Caraguatatuba - SP - 11660-497","", "100","75","129","440","","1160","","","1","Inversor","U2N000298","GW000121"),
+    ("EEE JARDIM IKEDA","Suzano","Rua Flores de Narciso - Jardim Ikeda - Suzano - SP - 08613-035","", "CLARO","","110","185,45","440","","1776","","","1","Inversor","U2N000308","Sem Gateway"),
+    ("EEE PLANALTO","Suzano","Estr. da Boracéia - Jardim Ikeda - Suzano - SP - 08640-115","", "","132","211,2","440","","1776","","","1","Inversor","U2N000306","GW000120"),
+    ("EEE SUZANO 1","Suzano","(não informado)","", "","","","","","","","","","","Inversor","U2N000302",""),
+    ("EEE VILA RAMOS","Franco da Rocha","Praça Antônio Teixeira - Vila Ramos - Franco da Rocha - SP - 07859-340","", "60","45","88","380","","1775","","","1","Inversor","U2N000292","GW000119"),
+    ("EEE VILA RAMOS","Franco da Rocha","Praça Antônio Teixeira - Vila Ramos - Franco da Rocha - SP - 07859-340","", "60","","82","380","","1775","","","1","Inversor","U2N000305","GW000119"),
 ]
 df_inv = pd.DataFrame(inv_rows, columns=[
     "Local","Cidade","Endereço","Coordenadas","Operadora","Potência (cv)","Potência (kW)","Corrente (A)","Tensão (V)",
@@ -163,9 +131,6 @@ df_inv = pd.DataFrame(inv_rows, columns=[
 series_offline = {"U2N000277","U2N000308"}
 df_inv["Online"] = ~df_inv["Série"].isin(series_offline)
 
-# ============================================================
-# CRONOGRAMA (37 instalados)
-# ============================================================
 registros = [
     {"data":"2025-08-11","cidade":"São Paulo","local":"EEE Alvarenga Mãe","ultronlines":4,"ultronlinks":0,"gateways_extra":0,
      "obs":"U2N000283 (TC 35→24 mm), U2N000282 (ligado c/ gateway), U2N000287, U2N000270."},
@@ -213,9 +178,6 @@ registros = [
 df = pd.DataFrame(registros)
 df["data"] = pd.to_datetime(df["data"])
 
-# ============================================================
-# SÉRIES / STATUS / DATAS
-# ============================================================
 date_map = {
     "U2N000283":"2025-08-11","U2N000282":"2025-08-11","U2N000287":"2025-08-11","U2N000270":"2025-08-11",
     "U2N000269":"2025-08-12","U2N000288":"2025-08-12","U2N000278":"2025-08-12","U2N000286":"2025-08-12",
@@ -239,9 +201,42 @@ TOTAL_INSTALADOS = len(df_series)            # 37
 TOTAL_ONLINE     = int(df_series["Online"].sum())  # 35
 TOTAL_OFFLINE    = TOTAL_INSTALADOS - TOTAL_ONLINE # 2
 
-# ============================================================
-# Agregações para gráficos
-# ============================================================
+# =========================
+# Cabeçalho e KPIs (HTML puro, cores inline)
+# =========================
+st.markdown(
+    f"""
+    <div style="color:{COR_TXT} !important;">
+      <h1 style="margin:0 0 6px 0; font-size:44px; line-height:1.15; font-weight:800; color:{COR_TXT} !important;">
+        Instalações 2Neuron na Sabesp (11–22/Ago/2025)
+      </h1>
+      <div style="opacity:.9; margin:0 0 18px 0; font-size:15px; color:{COR_TXT} !important;">
+        Consolida cronograma (37 instalados), status (35 online / 2 offline), inventário técnico e observações.
+      </div>
+
+      <div style="display:flex; gap:28px; flex-wrap:wrap;">
+        <div style="background:#FFFFFF; border:1px solid #E9E9EF; border-radius:12px; padding:14px 18px; min-width:220px;">
+          <div style="font-size:13px; opacity:.75; margin-bottom:6px; color:{COR_TXT} !important;">Instalados (total)</div>
+          <div style="font-size:36px; font-weight:700; color:{COR_TXT} !important;">{TOTAL_INSTALADOS}</div>
+        </div>
+        <div style="background:#FFFFFF; border:1px solid #E9E9EF; border-radius:12px; padding:14px 18px; min-width:220px;">
+          <div style="font-size:13px; opacity:.75; margin-bottom:6px; color:{COR_TXT} !important;">Online</div>
+          <div style="font-size:36px; font-weight:700; color:{COR_TXT} !important;">{TOTAL_ONLINE}</div>
+        </div>
+        <div style="background:#FFFFFF; border:1px solid #E9E9EF; border-radius:12px; padding:14px 18px; min-width:220px;">
+          <div style="font-size:13px; opacity:.75; margin-bottom:6px; color:{COR_TXT} !important;">Offline</div>
+          <div style="font-size:36px; font-weight:700; color:{COR_TXT} !important;">{TOTAL_OFFLINE}</div>
+          <div style="font-size:12px; opacity:.7; margin-top:2px; color:{COR_TXT} !important;">277 (Talamanca) e 308 (Jardim Ikeda)</div>
+        </div>
+      </div>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+# =========================
+# Gráficos (PNG)
+# =========================
 dia = (df.groupby("data", as_index=False)["ultronlines"].sum()
          .rename(columns={"ultronlines":"ultronlines_dia"}))
 dia["data_str"] = dia["data"].dt.strftime("%d/%m/%Y")
@@ -251,94 +246,81 @@ dia_sorted["acumulado"] = dia_sorted["ultronlines_dia"].cumsum()
 cidade_dist = (df_inv.groupby("Cidade", as_index=False)["Série"].count()
                .rename(columns={"Série":"Ultronlines"}))
 
-# ============================================================
-# Figuras (tudo com cor explícita + eixos)
-# ============================================================
 def fig_barras_por_dia():
     fig = go.Figure(go.Bar(
-        x=dia_sorted["data_str"],
-        y=dia_sorted["ultronlines_dia"],
-        text=dia_sorted["ultronlines_dia"],
-        textposition="auto",
+        x=dia_sorted["data_str"], y=dia_sorted["ultronlines_dia"],
+        text=dia_sorted["ultronlines_dia"], textposition="auto",
         marker=dict(color=COR_PRI, line=dict(color=AXIS, width=0))
     ))
     fig.update_layout(title="Ultronlines Instalados por Dia",
                       xaxis_title="Data", yaxis_title="Quantidade", **BASE_LAYOUT)
-    apply_axes_style(fig)
-    return fig
+    axes_style(fig); return fig
 
 def fig_acumulado():
     fig = go.Figure(go.Scatter(
-        x=dia_sorted["data_str"],
-        y=dia_sorted["acumulado"],
-        mode="lines+markers",
-        line=dict(width=3, color=COR_SEC),
-        marker=dict(size=8, color=COR_SEC, line=dict(color=COR_SEC, width=0))
+        x=dia_sorted["data_str"], y=dia_sorted["acumulado"],
+        mode="lines+markers", line=dict(width=3, color=COR_SEC),
+        marker=dict(size=8, color=COR_SEC)
     ))
     fig.update_layout(title="Acumulado de Ultronlines Instalados",
                       xaxis_title="Data", yaxis_title="Acumulado", **BASE_LAYOUT)
-    apply_axes_style(fig)
-    return fig
+    axes_style(fig); return fig
 
 def fig_cidade():
     colors = [cores_2neuron[i % len(cores_2neuron)] for i in range(len(cidade_dist))]
     fig = go.Figure(go.Bar(
         x=cidade_dist["Cidade"], y=cidade_dist["Ultronlines"],
         text=cidade_dist["Ultronlines"], textposition="auto",
-        marker=dict(color=colors, line=dict(color=AXIS, width=0))
+        marker=dict(color=colors)
     ))
     fig.update_layout(title="Distribuição por Cidade (Inventário)",
                       xaxis_title="Cidade", yaxis_title="Ultronlines", **BASE_LAYOUT)
-    apply_axes_style(fig)
-    return fig
+    axes_style(fig); return fig
 
 def fig_status():
     fig = go.Figure(go.Pie(
         labels=["Online","Offline"], values=[TOTAL_ONLINE, TOTAL_OFFLINE],
-        marker=dict(colors=[COR_PRI, COR_ALERTA]),
-        hole=0.5, sort=False, textfont=dict(color=COR_TXT, family=BASE_FONT)
+        marker=dict(colors=[COR_PRI, COR_ALERTA]), hole=0.5, sort=False,
+        textfont=dict(color=COR_TXT, family=BASE_FONT)
     ))
     fig.update_layout(title="Status dos Ultronlines (37 instalados)", **BASE_LAYOUT)
     return fig
 
-# ============================================================
-# Layout
-# ============================================================
-st.title("Instalações 2Neuron na Sabesp (11–22/Ago/2025)")
-st.caption("Consolida cronograma (37 instalados), status (35 online / 2 offline), inventário técnico e observações.")
-
-c1, c2, c3 = st.columns([1,1,2])
-with c1: st.metric("Instalados (total)", TOTAL_INSTALADOS)
-with c2: st.metric("Online", TOTAL_ONLINE)
-with c3: st.metric("Offline", TOTAL_OFFLINE, help="277 (Talamanca) e 308 (Jardim Ikeda)")
-
 g1, g2 = st.columns(2)
-with g1: safe_show(fig_barras_por_dia())
-with g2: safe_show(fig_acumulado())
+with g1: show(fig_barras_por_dia())
+with g2: show(fig_acumulado())
 
 g3, g4 = st.columns(2)
-with g3: safe_show(fig_cidade())
-with g4: safe_show(fig_status(), height=430)
+with g3: show(fig_cidade())
+with g4: show(fig_status(), height=430)
 
-# Tabelas como PNG determinístico
-plotly_table(
-    df[["data","cidade","local","ultronlines","ultronlinks","gateways_extra","obs"]]
-      .sort_values(["data","cidade","local"])
-      .rename(columns={"data":"Data","cidade":"Cidade","local":"Local",
-                       "ultronlines":"Ultronlines","ultronlinks":"Ultronlinks",
-                       "gateways_extra":"Gateways extra","obs":"Observações"}),
-    title="Detalhamento diário (cronograma)"
-)
+# =========================
+# Tabelas (PNG)
+# =========================
+df_crono = (df[["data","cidade","local","ultronlines","ultronlinks","gateways_extra","obs"]]
+            .sort_values(["data","cidade","local"])
+            .rename(columns={"data":"Data","cidade":"Cidade","local":"Local",
+                             "ultronlines":"Ultronlines","ultronlinks":"Ultronlinks",
+                             "gateways_extra":"Gateways extra","obs":"Observações"}))
+table_png(df_crono, "Detalhamento diário (cronograma)")
 
 df_series_view = (df_series
                   .sort_values(["Online","Data","Série"], ascending=[False, True, True])
                   .assign(Status=lambda x: x["Online"].map({True:"Online", False:"Offline"}))
                   [["Série","Status","Data","Cidade","Local","Gateway"]])
-plotly_table(df_series_view, title="Séries instaladas e status (37)")
+table_png(df_series_view, "Séries instaladas e status (37)")
 
 df_inv_view = (df_inv.rename(columns={
     "Potência (cv)":"Pot (cv)","Potência (kW)":"Pot (kW)","Corrente (A)":"Corr (A)",
     "Tensão (V)":"Tensão (V)","Rotação (RPM)":"RPM","Seção Cabo (mm²)":"Seção (mm²)",
     "Diâm. externo (mm)":"Diâm (mm)","Cabos/fase":"Cabos/fase"
-})[["Local","Cidade","Série","Gateway","Operadora","Acionamento","Potência (cv)","Potência (kW)","Corrente (A)","Tensão (V)","Rotação (RPM)","Seção Cabo (mm²)","Diâm. externo (mm)","Cabos/fase","Endereço","Coordenadas","Online"]])
-plotly_table(df_inv_view, title="Inventário técnico (campos principais)")
+})[["Local","Cidade","Série","Gateway","Operadora","Acionamento","Pot (cv)","Pot (kW)","Corr (A)","Tensão (V)","RPM","Seção (mm²)","Diâm (mm)","Cabos/fase","Endereço","Coordenadas","Online"]])
+table_png(df_inv_view, "Inventário técnico (campos principais)")
+
+# Observação final (HTML inline)
+st.markdown(
+    f"<div style='color:{COR_TXT} !important; opacity:.85;'>"
+    "Observação: 11/08 = 4 (inclui 270 em Alvarenga Mãe) • 12/08 = 4 (269 e 288 em Lavapés)."
+    "</div>",
+    unsafe_allow_html=True
+)
