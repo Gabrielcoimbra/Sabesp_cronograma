@@ -2,9 +2,10 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+import plotly.io as pio
 
 # =========================
-# Paleta 2Neuron
+# Paleta 2Neuron (fixa)
 # =========================
 cores_2neuron = ['#6A0DAD', '#8A2BE2', '#9370DB', '#D8BFD8', '#4B0082']
 COR_BG = "#F8F8FF"
@@ -12,14 +13,26 @@ COR_TXT = "#2D2D2D"
 COR_PRI = cores_2neuron[0]
 COR_SEC = cores_2neuron[1]
 
+# Garante que o Plotly não varie com o tema do Streamlit
+pio.templates.default = "plotly_white"
+BASE_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+
 st.set_page_config(page_title="Instalações 2Neuron | Sabesp", layout="wide")
 
-# Estilinho leve de fundo e fontes
+# CSS para fixar fundos e fonte global (independente do tema do visitante)
 st.markdown(
     f"""
     <style>
-      .block-container {{ padding-top: 1rem; padding-bottom: 1rem; background: {COR_BG}; }}
-      h1,h2,h3,h4,h5,h6 {{ color: {COR_PRI}; }}
+      html, body, [data-testid="stAppViewContainer"] {{
+        background: {COR_BG} !important;
+        color: {COR_TXT} !important;
+        font-family: {BASE_FONT};
+      }}
+      .block-container {{
+        padding-top: 1rem; padding-bottom: 1rem; background: {COR_BG};
+        color: {COR_TXT};
+      }}
+      h1,h2,h3,h4,h5,h6 {{ color: {COR_PRI}; font-family: {BASE_FONT}; }}
     </style>
     """,
     unsafe_allow_html=True
@@ -165,8 +178,15 @@ cidade_dist = (df_inv.groupby("Cidade", as_index=False)["Série"].count()
                .rename(columns={"Série":"Ultronlines"}))
 
 # ============================================================
-# Figuras (Plotly)
+# Figuras (Plotly) — layout padrão fixo
 # ============================================================
+BASE_LAYOUT = dict(
+    paper_bgcolor=COR_BG,
+    plot_bgcolor=COR_BG,
+    font=dict(color=COR_TXT, size=14, family=BASE_FONT),
+    colorway=cores_2neuron
+)
+
 def fig_barras_por_dia():
     fig = go.Figure(go.Bar(
         x=dia_sorted["data_str"],
@@ -175,28 +195,21 @@ def fig_barras_por_dia():
         textposition="auto",
         marker_color=COR_PRI
     ))
-    fig.update_layout(
-        title="Ultronlines Instalados por Dia",
-        xaxis_title="Data", yaxis_title="Quantidade",
-        plot_bgcolor=COR_BG, paper_bgcolor=COR_BG, font=dict(color=COR_TXT, size=14)
-    )
+    fig.update_layout(title="Ultronlines Instalados por Dia",
+                      xaxis_title="Data", yaxis_title="Quantidade", **BASE_LAYOUT)
     return fig
 
 def fig_acumulado():
     fig = go.Figure(go.Scatter(
         x=dia_sorted["data_str"], 
         y=dia_sorted["acumulado"],
-        mode="lines+markers", 
-        line=dict(width=3, color=COR_SEC),   # ✅ junta largura e cor
+        mode="lines+markers",
+        line=dict(width=3, color=COR_SEC),
         marker=dict(size=8)
     ))
-    fig.update_layout(
-        title="Acumulado de Ultronlines Instalados",
-        xaxis_title="Data", yaxis_title="Acumulado",
-        plot_bgcolor=COR_BG, paper_bgcolor=COR_BG, font=dict(color=COR_TXT, size=14)
-    )
+    fig.update_layout(title="Acumulado de Ultronlines Instalados",
+                      xaxis_title="Data", yaxis_title="Acumulado", **BASE_LAYOUT)
     return fig
-
 
 def fig_cidade():
     colors = [cores_2neuron[i % len(cores_2neuron)] for i in range(len(cidade_dist))]
@@ -204,21 +217,17 @@ def fig_cidade():
         x=cidade_dist["Cidade"], y=cidade_dist["Ultronlines"],
         text=cidade_dist["Ultronlines"], textposition="auto", marker_color=colors
     ))
-    fig.update_layout(
-        title="Distribuição por Cidade (Inventário)", xaxis_title="Cidade", yaxis_title="Ultronlines",
-        plot_bgcolor=COR_BG, paper_bgcolor=COR_BG, font=dict(color=COR_TXT, size=14)
-    )
+    fig.update_layout(title="Distribuição por Cidade (Inventário)",
+                      xaxis_title="Cidade", yaxis_title="Ultronlines", **BASE_LAYOUT)
     return fig
 
 def fig_status():
     fig = go.Figure(go.Pie(
         labels=["Online","Offline"], values=[TOTAL_ONLINE, TOTAL_OFFLINE],
-        marker=dict(colors=[COR_PRI, "#E76F51"]), hole=0.5
+        marker=dict(colors=[COR_PRI, "#E76F51"]), hole=0.5,
+        sort=False
     ))
-    fig.update_layout(
-        title="Status dos Ultronlines (37 instalados)",
-        plot_bgcolor=COR_BG, paper_bgcolor=COR_BG, font=dict(color=COR_TXT, size=14)
-    )
+    fig.update_layout(title="Status dos Ultronlines (37 instalados)", **BASE_LAYOUT)
     return fig
 
 # ============================================================
@@ -236,19 +245,18 @@ with c2:
 with c3:
     st.metric("Offline", TOTAL_OFFLINE, help="277 (Talamanca) e 308 (Jardim Ikeda)")
 
-# Gráficos (linha 1)
+# Tema do Streamlit DESLIGADO nos charts (garante consistência)
 g1, g2 = st.columns(2)
 with g1:
-    st.plotly_chart(fig_barras_por_dia(), use_container_width=True)
+    st.plotly_chart(fig_barras_por_dia(), use_container_width=True, theme="none")
 with g2:
-    st.plotly_chart(fig_acumulado(), use_container_width=True)
+    st.plotly_chart(fig_acumulado(), use_container_width=True, theme="none")
 
-# Gráficos (linha 2)
 g3, g4 = st.columns(2)
 with g3:
-    st.plotly_chart(fig_cidade(), use_container_width=True)
+    st.plotly_chart(fig_cidade(), use_container_width=True, theme="none")
 with g4:
-    st.plotly_chart(fig_status(), use_container_width=True)
+    st.plotly_chart(fig_status(), use_container_width=True, theme="none")
 
 # Tabelas
 st.subheader("Detalhamento diário (cronograma)")
