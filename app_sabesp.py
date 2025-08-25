@@ -1,54 +1,34 @@
 # streamlit_app.py
-import io
-import os
-import glob
-import unicodedata
+import os, glob, unicodedata, io
 import pandas as pd
 import streamlit as st
 from PIL import Image
 import plotly.graph_objects as go
 import plotly.io as pio
 
-# =========================
-# Paleta 2Neuron (fixa)
-# =========================
+# -------------------- Aparência fixa --------------------
 cores_2neuron = ['#6A0DAD', '#8A2BE2', '#9370DB', '#D8BFD8', '#4B0082']
-COR_BG = "#F8F8FF"
-COR_TXT = "#2D2D2D"
-COR_PRI = cores_2neuron[0]
-COR_SEC = cores_2neuron[1]
-COR_ALERTA = "#E76F51"
-GRID = "#E6E6F0"
-ZERO = "#D0D0DF"
-AXIS = "#B0B0C0"
+COR_BG, COR_TXT = "#F8F8FF", "#2D2D2D"
+COR_PRI, COR_SEC, COR_ALERTA = cores_2neuron[0], cores_2neuron[1], "#E76F51"
+GRID, ZERO, AXIS = "#E6E6F0", "#D0D0DF", "#B0B0C0"
 BASE_FONT = "DejaVu Sans, Arial, Helvetica, sans-serif"
-
 pio.templates.default = None
 st.set_page_config(page_title="Instalações 2Neuron | Sabesp", layout="wide")
-st.markdown(
-    f"""
-    <style>
-      :root {{ color-scheme: light; }}
-      html, body, [data-testid="stAppViewContainer"] {{
-        background: {COR_BG} !important;
-        font-family: {BASE_FONT};
-      }}
-      .block-container {{ padding-top: 1rem; padding-bottom: 1rem; }}
-    </style>
-    """,
-    unsafe_allow_html=True
-)
+st.markdown(f"""
+<style>
+:root {{ color-scheme: light; }}
+html, body, [data-testid="stAppViewContainer"] {{
+  background:{COR_BG} !important; font-family:{BASE_FONT};
+}}
+.block-container {{ padding-top: 1rem; padding-bottom: 1rem; }}
+</style>
+""", unsafe_allow_html=True)
 
-# =========================
-# Utils
-# =========================
 BASE_LAYOUT = dict(
-    paper_bgcolor=COR_BG,
-    plot_bgcolor=COR_BG,
+    paper_bgcolor=COR_BG, plot_bgcolor=COR_BG,
     font=dict(color=COR_TXT, size=14, family=BASE_FONT),
     margin=dict(l=50, r=20, t=60, b=60)
 )
-
 def axes_style(fig):
     fig.update_layout(
         xaxis=dict(showgrid=True, gridcolor=GRID, zeroline=True, zerolinecolor=ZERO,
@@ -56,165 +36,120 @@ def axes_style(fig):
         yaxis=dict(showgrid=True, gridcolor=GRID, zeroline=True, zerolinecolor=ZERO,
                    linecolor=AXIS, linewidth=1, mirror=True, ticks="outside")
     )
+def show(fig): st.plotly_chart(fig, use_container_width=True, theme="none")
 
-def fig_to_png(fig, width=1100, height=420, scale=3):
-    fig.update_layout(template=None)
-    img = fig.to_image(format="png", width=width, height=height, scale=scale)  # requer kaleido
-    return Image.open(io.BytesIO(img))
-
-def show(fig, width=1100, height=420):
-    try:
-        st.image(fig_to_png(fig, width=width, height=height), use_container_width=True)
-    except Exception:
-        st.plotly_chart(fig, use_container_width=True, theme="none")
-
-def table_png(df: pd.DataFrame, title: str, max_h_px: int = 760):
-    df = df.astype(str)
-    fig = go.Figure(data=[go.Table(
-        header=dict(values=list(df.columns), fill_color="#FFFFFF",
-                    line_color="#DDDDDD", align="left",
-                    font=dict(color=COR_TXT, size=13, family=BASE_FONT), height=32),
-        cells=dict(values=[df[c] for c in df.columns], fill_color="#FFFFFF",
-                   line_color="#EEEEEE", align="left",
-                   font=dict(color=COR_TXT, size=12, family=BASE_FONT), height=28)
-    )])
-    fig.update_layout(title=title, **BASE_LAYOUT)
-    h = min(max_h_px, 120 + len(df) * 28)
-    show(fig, width=1200, height=h)
-
-# =========================
-# Leitura da planilha (raiz do repo ou uploader)
-# =========================
-ALVO_BASE = "SABESP - Gestão Contrato Sabesp 00248-25 - 112 Ultronline (3)"
+# -------------------- Leitura dura da planilha --------------------
+ALVO = "SABESP - Gestão Contrato Sabesp 00248-25 - 112 Ultronline (3)"
 
 def normalizar_col(col: str) -> str:
-    c = unicodedata.normalize("NFKD", col).encode("ASCII", "ignore").decode("ASCII")
-    c = c.replace("\n", " ").replace("\r", " ")
-    c = " ".join(c.split())
+    c = unicodedata.normalize("NFKD", col).encode("ASCII","ignore").decode("ASCII")
+    c = " ".join(c.replace("\n"," ").replace("\r"," ").split())
     return c.upper()
 
-def localizar_arquivo_base():
-    padrões = [f"./{ALVO_BASE}.*", f"./{ALVO_BASE}*.*"]
-    candidatos = []
-    for p in padrões:
-        candidatos.extend(glob.glob(p))
-    preferencia = [".xlsx", ".xls", ".csv", ".parquet"]
-    if candidatos:
-        candidatos.sort(key=lambda x: (preferencia.index(os.path.splitext(x)[1].lower())
-                                       if os.path.splitext(x)[1].lower() in preferencia else 99))
-        return candidatos[0]
-    return None
+def listar_arquivos():
+    # raiz do projeto
+    cand = []
+    for pad in (f"./{ALVO}.*", f"./{ALVO}*.*"):
+        cand += glob.glob(pad)
+    # mantém apenas tipos comuns
+    exts_ok = {".xlsx",".xls",".csv",".parquet"}
+    cand = [p for p in cand if os.path.splitext(p)[1].lower() in exts_ok]
+    # ordena (prioriza Excel)
+    prioridade = [".xlsx",".xls",".csv",".parquet"]
+    cand.sort(key=lambda p: prioridade.index(os.path.splitext(p)[1].lower()))
+    return cand
 
-def ler_planilha(caminho: str | None) -> pd.DataFrame:
-    if caminho and os.path.exists(caminho):
-        ext = os.path.splitext(caminho)[1].lower()
-        if ext in [".xlsx", ".xls"]:
-            return pd.read_excel(caminho)
-        if ext == ".csv":
-            try:
-                return pd.read_csv(caminho, sep=";")
-            except Exception:
-                return pd.read_csv(caminho)
-        if ext == ".parquet":
-            return pd.read_parquet(caminho)
-        return pd.read_excel(caminho)
-
-    st.info("Arquivo não encontrado na raiz. Envie a planilha pelo uploader abaixo.")
-    up = st.file_uploader("Envie o arquivo (xlsx/xls/csv/parquet)", type=["xlsx","xls","csv","parquet"])
-    if up is None:
-        st.stop()
-    ext = os.path.splitext(up.name)[1].lower()
-    if ext in [".xlsx", ".xls"]:
-        return pd.read_excel(up)
+def ler_arquivo(path: str) -> pd.DataFrame:
+    ext = os.path.splitext(path)[1].lower()
+    if ext in [".xlsx",".xls"]:
+        return pd.read_excel(path)
     if ext == ".csv":
-        try:
-            return pd.read_csv(up, sep=";")
-        except Exception:
-            return pd.read_csv(up)
+        # tenta ; e ,
+        try:   return pd.read_csv(path, sep=";")
+        except Exception: return pd.read_csv(path)
     if ext == ".parquet":
-        return pd.read_parquet(up)
-    return pd.read_excel(up)
+        return pd.read_parquet(path)
+    # fallback
+    return pd.read_excel(path)
 
-def preparar_dataframe(df_raw: pd.DataFrame) -> pd.DataFrame:
-    m = {c: normalizar_col(c) for c in df_raw.columns}
-    df = df_raw.rename(columns=m).copy()
+def preparar(df_raw: pd.DataFrame) -> pd.DataFrame:
+    # normaliza cabeçalhos
+    df = df_raw.rename(columns={c: normalizar_col(c) for c in df_raw.columns}).copy()
 
-    # Aliases mínimos para garantir as colunas principais solicitadas
+    # mapeamento de aliases -> nomes canônicos obrigatórios
     alias = {
         "LOCAL": ["LOCAL"],
         "CIDADE": ["CIDADE"],
         "MÓDULO": ["MODULO","SERIE","MÓDULO/ SÉRIE","SERIE/MODULO"],
         "GATEWAY": ["GATEWAY"],
-        "DATA INSTALAÇÃO ULTRONLINE": ["DATA INSTALACAO ULTRONLINE","DATA INSTALACAO","DATA INSTALAÇÃO"],
+        "DATA INSTALAÇÃO ULTRONLINE": ["DATA INSTALACAO ULTRONLINE","DATA INSTALAÇÃO","DATA INSTALACAO"],
         "DATA PLANEJADA": ["DATA PLANEJADA","DATA PREVISTA"]
     }
 
-    # Mapear nomes canônicos
-    canon = {}
-    for alvo, opcoes in alias.items():
-        for o in opcoes:
+    # encontra as colunas
+    mapa = {}
+    for alvo, opts in alias.items():
+        for o in opts:
             if o in df.columns:
-                canon[alvo] = o
+                mapa[alvo] = o
                 break
 
-    # Garantir colunas mesmo se ausentes
-    for k in alias.keys():
-        if k not in canon:
-            df[k] = pd.NA
-            canon[k] = k
+    # valida obrigatórias
+    obrig = ["LOCAL","CIDADE","MÓDULO","GATEWAY","DATA INSTALAÇÃO ULTRONLINE"]
+    faltam = [c for c in obrig if c not in mapa]
+    if faltam:
+        st.error(
+            "Colunas obrigatórias ausentes na planilha (depois da normalização): "
+            + ", ".join(faltam)
+            + ".\n\nColunas que encontrei: "
+            + ", ".join(df.columns)
+        )
+        st.stop()
 
-    # Renomear p/ canônico
-    df = df.rename(columns={canon[k]: k for k in canon})
+    # renomeia para canônicos
+    df = df.rename(columns={mapa[k]: k for k in mapa})
 
-    # Tipos
-    for dcol in ["DATA INSTALAÇÃO ULTRONLINE", "DATA PLANEJADA"]:
-        df[dcol] = pd.to_datetime(df[dcol], errors="coerce")
-
-    # Strings chave
+    # tipos
+    for dcol in ["DATA INSTALAÇÃO ULTRONLINE","DATA PLANEJADA"]:
+        if dcol in df.columns:
+            df[dcol] = pd.to_datetime(df[dcol], errors="coerce")
     for scol in ["LOCAL","CIDADE","MÓDULO","GATEWAY"]:
         df[scol] = df[scol].astype(str).str.strip()
 
-    # Status online simples (com base em gateway)
-    df["ONLINE"] = True
-    df.loc[df["GATEWAY"].str.lower().eq("sem gateway"), "ONLINE"] = False
-
+    # status online simples via gateway
+    df["ONLINE"] = ~df["GATEWAY"].str.lower().eq("sem gateway")
     return df
 
-# =========================
-# Registros (somente texto/log – não afeta contagens)
-# =========================
-registros = [
-    {"data":"2025-08-11","cidade":"São Paulo","local":"EEE Alvarenga Mãe",
-     "obs":"U2N000283 (TC 35→24 mm), U2N000282 (com gateway), U2N000287, U2N000270."},
-    {"data":"2025-08-12","cidade":"São José dos Campos","local":"EEE Lavapés",
-     "obs":"U2N000269 e U2N000288; conexões confirmadas."},
-    # … mantenha/adapte livremente
-]
-df_reg = pd.DataFrame(registros)
-if not df_reg.empty:
-    df_reg["data"] = pd.to_datetime(df_reg["data"], errors="coerce")
+# -------------------- Seletor/força de arquivo --------------------
+st.sidebar.markdown("### Arquivo da planilha")
+arquivos = listar_arquivos()
+if not arquivos:
+    st.sidebar.error("Não encontrei o arquivo na raiz do projeto com o nome alvo.")
+    up = st.sidebar.file_uploader("Envie a planilha (xlsx/xls/csv/parquet)", type=["xlsx","xls","csv","parquet"])
+    if up is None:
+        st.stop()
+    tmp_path = f"./__upload__{up.name}"
+    with open(tmp_path, "wb") as f: f.write(up.getbuffer())
+    arquivos = [tmp_path]
 
-# =========================
-# Carregar & preparar
-# =========================
-caminho = localizar_arquivo_base()
-df_raw = ler_planilha(caminho)
-df = preparar_dataframe(df_raw)
+arq_escolhido = st.sidebar.selectbox("Selecione o arquivo encontrado:", arquivos, index=0)
+st.sidebar.success(f"Usando: {os.path.basename(arq_escolhido)}")
 
-# =========================
-# MÉTRICAS (usando APENAS planilha)
-# =========================
-# 1) INSTALADO (real): conta MÓDULO distinto por DATA INSTALAÇÃO ULTRONLINE
+# -------------------- Lê e prepara (obrigatório) --------------------
+df_raw = ler_arquivo(arq_escolhido)
+df = preparar(df_raw)
+
+# -------------------- Métricas e agregações (da planilha!) --------------------
+# Instalados (reais): módulos distintos por dia de instalação
 instalado = (df.dropna(subset=["MÓDULO","DATA INSTALAÇÃO ULTRONLINE"])
                .groupby("DATA INSTALAÇÃO ULTRONLINE", as_index=False)["MÓDULO"]
                .nunique()
                .rename(columns={"DATA INSTALAÇÃO ULTRONLINE":"DATA","MÓDULO":"INSTALADOS_DIA"})
-             )
-instalado = instalado.sort_values("DATA")
+            ).sort_values("DATA")
 instalado["ACUMULADO"] = instalado["INSTALADOS_DIA"].cumsum()
 instalado["DATA_STR"] = instalado["DATA"].dt.strftime("%d/%m/%Y")
 
-# 2) PLANEJADO (para visão futura, se quiser)
+# Planejado (opcional)
 planejado = (df.dropna(subset=["MÓDULO","DATA PLANEJADA"])
                .groupby("DATA PLANEJADA", as_index=False)["MÓDULO"]
                .nunique()
@@ -224,28 +159,26 @@ if not planejado.empty:
     planejado["ACUM_PLANEJADO"] = planejado["PLANEJADOS_DIA"].cumsum()
     planejado["DATA_STR"] = planejado["DATA"].dt.strftime("%d/%m/%Y")
 
-# 3) Distribuição por cidade (módulos únicos)
+# Cidade
 by_city = (df.dropna(subset=["MÓDULO"])
              .groupby("CIDADE", as_index=False)["MÓDULO"]
              .nunique()
              .rename(columns={"MÓDULO":"QTD"}))
 
-# 4) Online/Offline (baseado em gateway)
+# Status
 total_series = df["MÓDULO"].nunique(dropna=True)
 total_online = int(df.dropna(subset=["MÓDULO"])["ONLINE"].sum())
 total_offline = max(0, total_series - total_online)
 
-# =========================
-# Header + KPIs
-# =========================
+# -------------------- Header/KPIs --------------------
 st.markdown(
     f"""
-    <div style="color:{COR_TXT} !important;">
-      <h1 style="margin:0 0 6px 0; font-size:44px; line-height:1.15; font-weight:800; color:{COR_TXT} !important;">
-        Instalações 2Neuron na Sabesp
+    <div style="color:{COR_TXT}">
+      <h1 style="margin:0 0 6px 0; font-size:44px; line-height:1.15; font-weight:800;">
+        Instalações 2Neuron na Sabesp — **Planilha**
       </h1>
-      <div style="opacity:.9; margin:0 0 18px 0; font-size:15px; color:{COR_TXT} !important;">
-        Base: <b>{os.path.basename(caminho) if caminho else "upload manual"}</b> — módulos únicos: {total_series}
+      <div style="opacity:.9; margin:0 0 18px 0; font-size:15px;">
+        Base: <b>{os.path.basename(arq_escolhido)}</b> — módulos únicos: {total_series}
       </div>
       <div style="display:flex; gap:28px; flex-wrap:wrap;">
         <div style="background:#FFFFFF; border:1px solid #E9E9EF; border-radius:12px; padding:14px 18px; min-width:220px;">
@@ -266,68 +199,44 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# =========================
-# Gráficos (baseados na PLANILHA)
-# =========================
+# -------------------- Gráficos (só da planilha) --------------------
 def fig_instalados_por_dia():
-    if instalado.empty:
-        fig = go.Figure()
-        fig.update_layout(title="Ultronlines instalados por dia — sem dados de instalação", **BASE_LAYOUT)
-        axes_style(fig); return fig
-    fig = go.Figure(go.Bar(
-        x=instalado["DATA_STR"],
-        y=instalado["INSTALADOS_DIA"],
-        text=instalado["INSTALADOS_DIA"],
-        textposition="auto",
-        marker=dict(color=COR_PRI)
-    ))
+    fig = go.Figure()
+    if not instalado.empty:
+        fig.add_bar(x=instalado["DATA_STR"], y=instalado["INSTALADOS_DIA"],
+                    text=instalado["INSTALADOS_DIA"], textposition="auto",
+                    marker=dict(color=COR_PRI))
     fig.update_layout(title="Ultronlines instalados por dia (real)",
                       xaxis_title="Data de instalação", yaxis_title="Quantidade", **BASE_LAYOUT)
     axes_style(fig); return fig
 
 def fig_instalados_acumulado():
-    if instalado.empty:
-        fig = go.Figure()
-        fig.update_layout(title="Acumulado de Ultronlines instalados — sem dados", **BASE_LAYOUT)
-        axes_style(fig); return fig
-    fig = go.Figure(go.Scatter(
-        x=instalado["DATA_STR"],
-        y=instalado["ACUMULADO"],
-        mode="lines+markers",
-        line=dict(width=3, color=COR_SEC),
-        marker=dict(size=8, color=COR_SEC)
-    ))
+    fig = go.Figure()
+    if not instalado.empty:
+        fig.add_scatter(x=instalado["DATA_STR"], y=instalado["ACUMULADO"],
+                        mode="lines+markers",
+                        line=dict(width=3, color=COR_SEC),
+                        marker=dict(size=8, color=COR_SEC))
     fig.update_layout(title="Acumulado de Ultronlines instalados (real)",
                       xaxis_title="Data de instalação", yaxis_title="Acumulado", **BASE_LAYOUT)
     axes_style(fig); return fig
 
 def fig_planejado_por_dia():
-    if planejado.empty:
-        fig = go.Figure()
-        fig.update_layout(title="Ultronlines planejados por dia — sem dados", **BASE_LAYOUT)
-        axes_style(fig); return fig
-    fig = go.Figure(go.Bar(
-        x=planejado["DATA_STR"],
-        y=planejado["PLANEJADOS_DIA"],
-        text=planejado["PLANEJADOS_DIA"],
-        textposition="auto",
-        marker=dict(color="#9AA0A6")
-    ))
+    fig = go.Figure()
+    if not planejado.empty:
+        fig.add_bar(x=planejado["DATA_STR"], y=planejado["PLANEJADOS_DIA"],
+                    text=planejado["PLANEJADOS_DIA"], textposition="auto",
+                    marker=dict(color="#9AA0A6"))
     fig.update_layout(title="Ultronlines planejados por dia",
                       xaxis_title="Data planejada", yaxis_title="Quantidade", **BASE_LAYOUT)
     axes_style(fig); return fig
 
 def fig_cidade():
-    if by_city.empty:
-        fig = go.Figure()
-        fig.update_layout(title="Distribuição por Cidade — sem dados", **BASE_LAYOUT)
-        axes_style(fig); return fig
-    colors = [cores_2neuron[i % len(cores_2neuron)] for i in range(len(by_city))]
-    fig = go.Figure(go.Bar(
-        x=by_city["CIDADE"], y=by_city["QTD"],
-        text=by_city["QTD"], textposition="auto",
-        marker=dict(color=colors)
-    ))
+    fig = go.Figure()
+    if not by_city.empty:
+        fig.add_bar(x=by_city["CIDADE"], y=by_city["QTD"],
+                    text=by_city["QTD"], textposition="auto",
+                    marker=dict(color=[cores_2neuron[i % len(cores_2neuron)] for i in range(len(by_city))]))
     fig.update_layout(title="Distribuição por Cidade (módulos distintos)",
                       xaxis_title="Cidade", yaxis_title="Quantidade", **BASE_LAYOUT)
     axes_style(fig); return fig
@@ -341,7 +250,6 @@ def fig_status():
     fig.update_layout(title="Status (módulos únicos) — baseado em Gateway", **BASE_LAYOUT)
     return fig
 
-# Mostra
 c1, c2 = st.columns(2)
 with c1: show(fig_instalados_por_dia())
 with c2: show(fig_instalados_acumulado())
@@ -352,63 +260,26 @@ with c4: show(fig_status())
 
 show(fig_cidade())
 
-# =========================
-# Tabelas (derivadas da planilha)
-# =========================
-# 1) Cronograma real por LOCAL/CIDADE/DATA INSTALAÇÃO (conta módulos únicos)
+# -------------------- Tabelas derivadas (somente planilha) --------------------
 cron_real = (df.dropna(subset=["DATA INSTALAÇÃO ULTRONLINE"])
                .groupby(["DATA INSTALAÇÃO ULTRONLINE","CIDADE","LOCAL"], as_index=False)["MÓDULO"]
                .nunique()
-               .rename(columns={
-                   "DATA INSTALAÇÃO ULTRONLINE":"Data Instalação",
-                   "CIDADE":"Cidade",
-                   "LOCAL":"Local",
-                   "MÓDULO":"Módulos"}
-               )
-            ).sort_values(["Data Instalação","Cidade","Local"])
-table_png(cron_real, "Cronograma (REAL) — módulos instalados por dia/local")
+               .rename(columns={"DATA INSTALAÇÃO ULTRONLINE":"Data Instalação","MÓDULO":"Módulos"})
+            ).sort_values(["Data Instalação","CIDADE","LOCAL"])
+st.dataframe(cron_real, use_container_width=True)
 
-# 2) Cronograma planejado por LOCAL/CIDADE/DATA PLANEJADA (conta módulos únicos)
 cron_plan = (df.dropna(subset=["DATA PLANEJADA"])
                .groupby(["DATA PLANEJADA","CIDADE","LOCAL"], as_index=False)["MÓDULO"]
                .nunique()
-               .rename(columns={
-                   "DATA PLANEJADA":"Data Planejada",
-                   "CIDADE":"Cidade",
-                   "LOCAL":"Local",
-                   "MÓDULO":"Módulos"}
-               )
-            ).sort_values(["Data Planejada","Cidade","Local"])
-table_png(cron_plan, "Cronograma (PLANEJADO) — módulos por dia/local")
+               .rename(columns={"DATA PLANEJADA":"Data Planejada","MÓDULO":"Módulos"})
+            ).sort_values(["Data Planejada","CIDADE","LOCAL"])
+st.dataframe(cron_plan, use_container_width=True)
 
-# 3) Séries e status (usando apenas planilha)
 series_view = (df.loc[:, ["MÓDULO","ONLINE","DATA INSTALAÇÃO ULTRONLINE","DATA PLANEJADA","CIDADE","LOCAL","GATEWAY"]]
-                 .rename(columns={
-                     "MÓDULO":"Série",
-                     "ONLINE":"Status Online",
-                     "DATA INSTALAÇÃO ULTRONLINE":"Data Instalação",
-                     "DATA PLANEJADA":"Data Planejada",
-                     "CIDADE":"Cidade",
-                     "LOCAL":"Local",
-                     "GATEWAY":"Gateway"
-                 }))
-series_view["Status Online"] = series_view["Status Online"].map({True:"Online", False:"Offline"})
-series_view = series_view.sort_values(["Status Online","Data Instalação","Série"], ascending=[False, True, True])
-table_png(series_view, "Séries (da planilha) e status")
-
-# 4) Log textual dos seus registros (opcional — não usado nos cálculos)
-if not df_reg.empty:
-    df_reg_v = df_reg.rename(columns={"data":"Data","cidade":"Cidade","local":"Local","obs":"Observações"})
-    df_reg_v = df_reg_v.sort_values(["Data","Cidade","Local"])
-    table_png(df_reg_v, "Registros de campo (log textual – não interfere nos números)")
-
-# Nota final
-st.markdown(
-    f"<div style='color:{COR_TXT} !important; opacity:.85;'>"
-    "Todos os números de dias e quantidades de Ultronlines são calculados diretamente da <b>planilha</b>:<br>"
-    "<b>REAL</b> = contagem de <i>módulos distintos</i> por <i>DATA INSTALAÇÃO ULTRONLINE</i>.<br>"
-    "<b>PLANEJADO</b> = contagem de <i>módulos distintos</i> por <i>DATA PLANEJADA</i>.<br>"
-    "O bloco de <i>registros</i> é apenas um log textual para observações e não altera os gráficos/kpis."
-    "</div>",
-    unsafe_allow_html=True
-)
+                 .rename(columns={"MÓDULO":"Série","ONLINE":"Online",
+                                  "DATA INSTALAÇÃO ULTRONLINE":"Data Instalação",
+                                  "DATA PLANEJADA":"Data Planejada",
+                                  "CIDADE":"Cidade","LOCAL":"Local","GATEWAY":"Gateway"}))
+series_view["Online"] = series_view["Online"].map({True:"Online", False:"Offline"})
+series_view = series_view.sort_values(["Online","Data Instalação","Série"], ascending=[False, True, True])
+st.dataframe(series_view, use_container_width=True)
