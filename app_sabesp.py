@@ -1,7 +1,8 @@
 # streamlit_app.py
-import streamlit as st
-import streamlit.components.v1 as components
+import io
 import pandas as pd
+import streamlit as st
+from PIL import Image
 import plotly.graph_objects as go
 import plotly.io as pio
 
@@ -14,42 +15,66 @@ COR_TXT = "#2D2D2D"
 COR_PRI = cores_2neuron[0]
 COR_SEC = cores_2neuron[1]
 COR_ALERTA = "#E76F51"
+GRID = "#E6E6F0"
+ZERO = "#D0D0DF"
+AXIS = "#B0B0C0"
+BASE_FONT = "DejaVu Sans, Arial, Helvetica, sans-serif"
 
-# Não herdar temas globais do Plotly
+# Desliga templates globais do Plotly para não herdar nada
 pio.templates.default = None
-BASE_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
 
 st.set_page_config(page_title="Instalações 2Neuron | Sabesp", layout="wide")
 
-# CSS global para fundo e fontes (independe do tema do visitante)
+# CSS para blindar fundo e tipografia (inclusive em modo dark do SO)
 st.markdown(
     f"""
     <style>
+      :root {{ color-scheme: only light; }}
       html, body, [data-testid="stAppViewContainer"] {{
-        background: {COR_BG} !important;
-        color: {COR_TXT} !important;
+        background: {COR_BG} !important; color: {COR_TXT} !important;
         font-family: {BASE_FONT};
       }}
-      .block-container {{
-        padding-top: 1rem; padding-bottom: 1rem; background: {COR_BG};
-      }}
+      .block-container {{ padding-top: 1rem; padding-bottom: 1rem; background: {COR_BG}; }}
       h1,h2,h3,h4,h5,h6 {{ color: {COR_PRI}; font-family: {BASE_FONT}; }}
     </style>
     """,
     unsafe_allow_html=True
 )
 
-# ===== Helper para renderizar Plotly 100% isolado do tema do Streamlit =====
-def render_plotly(fig, height=420):
-    # Garante que NENHUM template externo seja usado
+# ---------- Funções utilitárias ----------
+BASE_LAYOUT = dict(
+    paper_bgcolor=COR_BG,
+    plot_bgcolor=COR_BG,
+    font=dict(color=COR_TXT, size=14, family=BASE_FONT),
+    margin=dict(l=50, r=20, t=60, b=60)
+)
+
+def apply_axes_style(fig):
+    fig.update_layout(
+        xaxis=dict(showgrid=True, gridcolor=GRID, zeroline=True, zerolinecolor=ZERO,
+                   linecolor=AXIS, linewidth=1, mirror=True, ticks="outside"),
+        yaxis=dict(showgrid=True, gridcolor=GRID, zeroline=True, zerolinecolor=ZERO,
+                   linecolor=AXIS, linewidth=1, mirror=True, ticks="outside")
+    )
+
+def fig_to_png(fig, width=1100, height=420, scale=3):
+    """Renderiza a figura como PNG no servidor (100% imutável para o cliente)."""
+    # Garante layout fechado
     fig.update_layout(template=None)
-    # Exporta HTML autocontido (usa plotlyjs via CDN)
-    html = fig.to_html(include_plotlyjs="cdn", full_html=False, config={
-        "responsive": True,
-        "displaylogo": False,
-        "modeBarButtonsToRemove": ["select2d", "lasso2d", "autoScale2d"]
-    })
-    components.html(html, height=height, scrolling=False)
+    img_bytes = fig.to_image(format="png", width=width, height=height, scale=scale)  # requer 'kaleido'
+    return Image.open(io.BytesIO(img_bytes))
+
+def safe_show(fig, height=420):
+    """Tenta exibir como PNG; se Kaleido não estiver disponível, cai para interativo."""
+    try:
+        img = fig_to_png(fig, height=height)
+        st.image(img, use_container_width=True)
+    except Exception as e:
+        st.warning(
+            "Exibindo versão interativa porque o pacote 'kaleido' não está disponível "
+            "(adicione 'kaleido' ao requirements.txt para travar 100%)."
+        )
+        st.plotly_chart(fig, use_container_width=True, theme="none")
 
 # ============================================================
 # INVENTÁRIO TÉCNICO (37 instalados)
@@ -97,8 +122,6 @@ df_inv = pd.DataFrame(inv_rows, columns=[
     "Local","Cidade","Endereço","Coordenadas","Operadora","Potência (cv)","Potência (kW)","Corrente (A)","Tensão (V)",
     "Relação TP","Rotação (RPM)","Seção Cabo (mm²)","Diâm. externo (mm)","Cabos/fase","Acionamento","Série","Gateway"
 ])
-
-# Status online/offline
 series_offline = {"U2N000277","U2N000308"}
 df_inv["Online"] = ~df_inv["Série"].isin(series_offline)
 
@@ -191,24 +214,19 @@ cidade_dist = (df_inv.groupby("Cidade", as_index=False)["Série"].count()
                .rename(columns={"Série":"Ultronlines"}))
 
 # ============================================================
-# Figuras (com todas as cores definidas)
+# Figuras (tudo com cor explícita + estilo de eixos)
 # ============================================================
-BASE_LAYOUT = dict(
-    paper_bgcolor=COR_BG,
-    plot_bgcolor=COR_BG,
-    font=dict(color=COR_TXT, size=14, family=BASE_FONT),
-)
-
 def fig_barras_por_dia():
     fig = go.Figure(go.Bar(
         x=dia_sorted["data_str"],
         y=dia_sorted["ultronlines_dia"],
         text=dia_sorted["ultronlines_dia"],
         textposition="auto",
-        marker=dict(color=COR_PRI)
+        marker=dict(color=COR_PRI, line=dict(color=AXIS, width=0))
     ))
     fig.update_layout(title="Ultronlines Instalados por Dia",
                       xaxis_title="Data", yaxis_title="Quantidade", **BASE_LAYOUT)
+    apply_axes_style(fig)
     return fig
 
 def fig_acumulado():
@@ -217,10 +235,11 @@ def fig_acumulado():
         y=dia_sorted["acumulado"],
         mode="lines+markers",
         line=dict(width=3, color=COR_SEC),
-        marker=dict(size=8, color=COR_SEC)
+        marker=dict(size=8, color=COR_SEC, line=dict(color=COR_SEC, width=0))
     ))
     fig.update_layout(title="Acumulado de Ultronlines Instalados",
                       xaxis_title="Data", yaxis_title="Acumulado", **BASE_LAYOUT)
+    apply_axes_style(fig)
     return fig
 
 def fig_cidade():
@@ -228,10 +247,11 @@ def fig_cidade():
     fig = go.Figure(go.Bar(
         x=cidade_dist["Cidade"], y=cidade_dist["Ultronlines"],
         text=cidade_dist["Ultronlines"], textposition="auto",
-        marker=dict(color=colors)
+        marker=dict(color=colors, line=dict(color=AXIS, width=0))
     ))
     fig.update_layout(title="Distribuição por Cidade (Inventário)",
                       xaxis_title="Cidade", yaxis_title="Ultronlines", **BASE_LAYOUT)
+    apply_axes_style(fig)
     return fig
 
 def fig_status():
@@ -244,34 +264,24 @@ def fig_status():
     return fig
 
 # ============================================================
-# Layout (Streamlit)
+# Layout
 # ============================================================
 st.title("Instalações 2Neuron na Sabesp (11–22/Ago/2025)")
 st.caption("Consolida cronograma (37 instalados), status (35 online / 2 offline), inventário técnico e observações.")
 
-# KPIs
 c1, c2, c3 = st.columns([1,1,2])
-with c1:
-    st.metric("Instalados (total)", TOTAL_INSTALADOS)
-with c2:
-    st.metric("Online", TOTAL_ONLINE)
-with c3:
-    st.metric("Offline", TOTAL_OFFLINE, help="277 (Talamanca) e 308 (Jardim Ikeda)")
+with c1: st.metric("Instalados (total)", TOTAL_INSTALADOS)
+with c2: st.metric("Online", TOTAL_ONLINE)
+with c3: st.metric("Offline", TOTAL_OFFLINE, help="277 (Talamanca) e 308 (Jardim Ikeda)")
 
-# Gráficos (renderizados como HTML independente)
 g1, g2 = st.columns(2)
-with g1:
-    render_plotly(fig_barras_por_dia())
-with g2:
-    render_plotly(fig_acumulado())
+with g1: safe_show(fig_barras_por_dia())
+with g2: safe_show(fig_acumulado())
 
 g3, g4 = st.columns(2)
-with g3:
-    render_plotly(fig_cidade())
-with g4:
-    render_plotly(fig_status(), height=430)
+with g3: safe_show(fig_cidade())
+with g4: safe_show(fig_status(), height=430)
 
-# Tabelas
 st.subheader("Detalhamento diário (cronograma)")
 df_crono = (df[["data","cidade","local","ultronlines","ultronlinks","gateways_extra","obs"]]
             .sort_values(["data","cidade","local"])
