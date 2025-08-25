@@ -83,7 +83,7 @@ def table_png(df: pd.DataFrame, title: str, max_h_px: int = 760):
     show(fig, width=1200, height=h)
 
 # ============================================================
-# DADOS (iguais ao que você enviou)
+# DADOS (inventário técnico conhecido)
 # ============================================================
 inv_rows = [
     ("EEE ALVARENGA MÃE","São Paulo","Praça Clóvis Beviláqua - Glicério - São Paulo - SP - 01018-001","23°41'43.5\"S 46°39'06.2\"W","", "120","88","145","440","","1764","","22","1","Soft Starter","U2N000287","GW000103"),
@@ -131,9 +131,12 @@ df_inv = pd.DataFrame(inv_rows, columns=[
 series_offline = {"U2N000277","U2N000308"}
 df_inv["Online"] = ~df_inv["Série"].isin(series_offline)
 
+# ============================================================
+# CRONOGRAMA (11/08 a 25/08) — agora com 25/08 Guarujá
+# ============================================================
 registros = [
     {"data":"2025-08-11","cidade":"São Paulo","local":"EEE Alvarenga Mãe","ultronlines":4,"ultronlinks":0,"gateways_extra":0,
-     "obs":"U2N000283 (TC 35→24 mm), U2N000282 (ligado c/ gateway), U2N000287, U2N000270."},
+     "obs":"U2N000283 (TC 35→24 mm), U2N000282 (com gateway), U2N000287, U2N000270."},
     {"data":"2025-08-12","cidade":"São José dos Campos","local":"EEE Lavapés","ultronlines":2,"ultronlinks":0,"gateways_extra":0,
      "obs":"U2N000269 e U2N000288; conexões confirmadas."},
     {"data":"2025-08-12","cidade":"São José dos Campos","local":"Interlagos 3","ultronlines":1,"ultronlinks":0,"gateways_extra":0,
@@ -174,10 +177,18 @@ registros = [
      "obs":"U2N000302 (ponto realocado)."},
     {"data":"2025-08-22","cidade":"Franco da Rocha","local":"EEE Vila Ramos","ultronlines":2,"ultronlinks":0,"gateways_extra":0,
      "obs":"U2N000292 e U2N000305."},
+    # ---- Novos (25/08) ----
+    {"data":"2025-08-25","cidade":"Guarujá","local":"EEE Enseada","ultronlines":2,"ultronlinks":0,"gateways_extra":0,
+     "obs":"Previstos: U2N000291 e U2N000289 (GW000124)."},
+    {"data":"2025-08-25","cidade":"Guarujá","local":"EEE Morrinhos Central","ultronlines":1,"ultronlinks":0,"gateways_extra":0,
+     "obs":"Previsto: U2N000299 (GW000122)."},
+    {"data":"2025-08-25","cidade":"Guarujá","local":"EEE Maluf","ultronlines":0,"ultronlinks":0,"gateways_extra":0,
+     "obs":"Sem séries informadas no quadro; aguardando confirmação."},
 ]
 df = pd.DataFrame(registros)
 df["data"] = pd.to_datetime(df["data"])
 
+# Mapa de datas por série (para inventário/visão série x data)
 date_map = {
     "U2N000283":"2025-08-11","U2N000282":"2025-08-11","U2N000287":"2025-08-11","U2N000270":"2025-08-11",
     "U2N000269":"2025-08-12","U2N000288":"2025-08-12","U2N000278":"2025-08-12","U2N000286":"2025-08-12",
@@ -189,6 +200,8 @@ date_map = {
     "U2N000298":"2025-08-20","U2N000312":"2025-08-20","U2N000301":"2025-08-20","U2N000304":"2025-08-20","U2N000309":"2025-08-20",
     "U2N000308":"2025-08-21","U2N000306":"2025-08-21","U2N000302":"2025-08-21",
     "U2N000292":"2025-08-22","U2N000305":"2025-08-22",
+    # Séries de 25/08 ainda não cadastradas no inventário técnico acima:
+    # "U2N000291":"2025-08-25","U2N000289":"2025-08-25","U2N000299":"2025-08-25",
 }
 df_series = (
     df_inv[["Série","Cidade","Local","Gateway"]]
@@ -197,26 +210,26 @@ df_series = (
 )
 df_series["Data"] = pd.to_datetime(df_series["Data"], errors="coerce")
 
-TOTAL_INSTALADOS = len(df_series)            # 37
-TOTAL_ONLINE     = int(df_series["Online"].sum())  # 35
+TOTAL_INSTALADOS = len(df_series)                 # segue 37 (inventário conhecido)
+TOTAL_ONLINE     = int(df_series["Online"].sum()) # 35
 TOTAL_OFFLINE    = TOTAL_INSTALADOS - TOTAL_ONLINE # 2
 
 # =========================
-# Cabeçalho e KPIs (HTML puro, cores inline)
+# Cabeçalho e KPIs
 # =========================
 st.markdown(
     f"""
     <div style="color:{COR_TXT} !important;">
       <h1 style="margin:0 0 6px 0; font-size:44px; line-height:1.15; font-weight:800; color:{COR_TXT} !important;">
-        Instalações 2Neuron na Sabesp (11–22/Ago/2025)
+        Instalações 2Neuron na Sabesp (11–25/Ago/2025)
       </h1>
       <div style="opacity:.9; margin:0 0 18px 0; font-size:15px; color:{COR_TXT} !important;">
-        Consolida cronograma (37 instalados), status (35 online / 2 offline), inventário técnico e observações.
+        Cronograma consolidado (inclui planejados até 25/08) e inventário técnico conhecido: {TOTAL_INSTALADOS} instalados, {TOTAL_ONLINE} online e {TOTAL_OFFLINE} offline.
       </div>
 
       <div style="display:flex; gap:28px; flex-wrap:wrap;">
         <div style="background:#FFFFFF; border:1px solid #E9E9EF; border-radius:12px; padding:14px 18px; min-width:220px;">
-          <div style="font-size:13px; opacity:.75; margin-bottom:6px; color:{COR_TXT} !important;">Instalados (total)</div>
+          <div style="font-size:13px; opacity:.75; margin-bottom:6px; color:{COR_TXT} !important;">Instalados (inventário)</div>
           <div style="font-size:36px; font-weight:700; color:{COR_TXT} !important;">{TOTAL_INSTALADOS}</div>
         </div>
         <div style="background:#FFFFFF; border:1px solid #E9E9EF; border-radius:12px; padding:14px 18px; min-width:220px;">
@@ -252,7 +265,7 @@ def fig_barras_por_dia():
         text=dia_sorted["ultronlines_dia"], textposition="auto",
         marker=dict(color=COR_PRI, line=dict(color=AXIS, width=0))
     ))
-    fig.update_layout(title="Ultronlines Instalados por Dia",
+    fig.update_layout(title="Ultronlines (cronograma) por dia",
                       xaxis_title="Data", yaxis_title="Quantidade", **BASE_LAYOUT)
     axes_style(fig); return fig
 
@@ -262,7 +275,7 @@ def fig_acumulado():
         mode="lines+markers", line=dict(width=3, color=COR_SEC),
         marker=dict(size=8, color=COR_SEC)
     ))
-    fig.update_layout(title="Acumulado de Ultronlines Instalados",
+    fig.update_layout(title="Acumulado (cronograma) de Ultronlines",
                       xaxis_title="Data", yaxis_title="Acumulado", **BASE_LAYOUT)
     axes_style(fig); return fig
 
@@ -273,7 +286,7 @@ def fig_cidade():
         text=cidade_dist["Ultronlines"], textposition="auto",
         marker=dict(color=colors)
     ))
-    fig.update_layout(title="Distribuição por Cidade (Inventário)",
+    fig.update_layout(title="Distribuição por Cidade (inventário técnico)",
                       xaxis_title="Cidade", yaxis_title="Ultronlines", **BASE_LAYOUT)
     axes_style(fig); return fig
 
@@ -283,7 +296,7 @@ def fig_status():
         marker=dict(colors=[COR_PRI, COR_ALERTA]), hole=0.5, sort=False,
         textfont=dict(color=COR_TXT, family=BASE_FONT)
     ))
-    fig.update_layout(title="Status dos Ultronlines (37 instalados)", **BASE_LAYOUT)
+    fig.update_layout(title=f"Status dos Ultronlines (inventário: {TOTAL_INSTALADOS})", **BASE_LAYOUT)
     return fig
 
 g1, g2 = st.columns(2)
@@ -302,13 +315,13 @@ df_crono = (df[["data","cidade","local","ultronlines","ultronlinks","gateways_ex
             .rename(columns={"data":"Data","cidade":"Cidade","local":"Local",
                              "ultronlines":"Ultronlines","ultronlinks":"Ultronlinks",
                              "gateways_extra":"Gateways extra","obs":"Observações"}))
-table_png(df_crono, "Detalhamento diário (cronograma)")
+table_png(df_crono, "Detalhamento diário (cronograma até 25/08)")
 
 df_series_view = (df_series
                   .sort_values(["Online","Data","Série"], ascending=[False, True, True])
                   .assign(Status=lambda x: x["Online"].map({True:"Online", False:"Offline"}))
                   [["Série","Status","Data","Cidade","Local","Gateway"]])
-table_png(df_series_view, "Séries instaladas e status (37)")
+table_png(df_series_view, "Séries instaladas e status (inventário técnico)")
 
 df_inv_view = (df_inv.rename(columns={
     "Potência (cv)":"Pot (cv)","Potência (kW)":"Pot (kW)","Corrente (A)":"Corr (A)",
@@ -320,7 +333,8 @@ table_png(df_inv_view, "Inventário técnico (campos principais)")
 # Observação final (HTML inline)
 st.markdown(
     f"<div style='color:{COR_TXT} !important; opacity:.85;'>"
-    "Observação: 11/08 = 4 (inclui 270 em Alvarenga Mãe) • 12/08 = 4 (269 e 288 em Lavapés)."
+    "Cronograma inclui Guarujá em 25/08 (Enseada ×2, Morrinhos Central ×1; Maluf aguardando séries). "
+    "Inventário técnico permanece com 37 séries cadastradas."
     "</div>",
     unsafe_allow_html=True
 )
