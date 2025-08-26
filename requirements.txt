@@ -7,3 +7,5 @@ plotly>=5.22
 kaleido==0.2.1
 pandas>=2.2
 Pillow>=10.4
+openpyxl          # para .xlsx / .xlsm
+xlrd==1.2.0       # para .xls (suporte antigo)
