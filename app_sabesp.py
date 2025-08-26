@@ -18,7 +18,7 @@ st.set_page_config(page_title="Teste — Excel + 1 gráfico", layout="wide")
 st.title("Teste: leitura do Excel + 1 gráfico")
 
 # -------- caminho EXATO do arquivo --------
-EXCEL_PATH = "./SABESP_Ultronline.xlsx.xlsx"
+EXCEL_PATH = "./SABESP_Ultronline.xlsx"
 
 # -------- checagens simples --------
 if not os.path.exists(EXCEL_PATH):
