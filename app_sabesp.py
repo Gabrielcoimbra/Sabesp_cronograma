@@ -1,5 +1,5 @@
 # app_sabesp.py
-# Lê EXATAMENTE: ./SABESP - Gestão Contrato Sabesp 00248-25 - 112 Ultronline (3).xlsx
+# Lê EXATAMENTE: ./SABESP-GestaoContratoSabesp00248-25.xlsx
 # Plota 1 gráfico: Ultronlines instalados por dia (MÓDULO distinto por DATA INSTALAÇÃO ULTRONLINE)
 
 import os, unicodedata
