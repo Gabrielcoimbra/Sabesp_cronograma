@@ -1,35 +1,24 @@
 # app_sabesp.py
-# Requisitos:
-#   streamlit, pandas, plotly, openpyxl
-# Obs: lê SOMENTE .xlsx/.xlsm na raiz. Sem uploader, sem registros manuais.
+# Lê EXATAMENTE: ./SABESP - Gestão Contrato Sabesp 00248-25 - 112 Ultronline (3).xlsx
+# e constrói o dashboard 100% a partir das colunas da planilha.
 
-import os, glob, unicodedata
+import os, unicodedata
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.io as pio
 import streamlit as st
 
-# ========== Desativa/limpa qualquer cache antigo ==========
-try:
-    st.cache_data.clear()
-    st.cache_resource.clear()
-except Exception:
-    pass
-
-# ========== Aparência fixa ==========
+# ===== Aparência =====
 pio.templates.default = None
 COR_BG, COR_TXT = "#F8F8FF", "#2D2D2D"
 COR_PRI, COR_SEC, COR_ALERTA = "#6A0DAD", "#8A2BE2", "#E76F51"
 GRID, ZERO, AXIS = "#E6E6F0", "#D0D0DF", "#B0B0C0"
 BASE_FONT = "DejaVu Sans, Arial, Helvetica, sans-serif"
-
 st.set_page_config(page_title="Instalações 2Neuron | Sabesp — Planilha", layout="wide")
 st.markdown(f"""
 <style>
 :root {{ color-scheme: light; }}
-html, body, [data-testid="stAppViewContainer"] {{
-  background:{COR_BG} !important; font-family:{BASE_FONT};
-}}
+html, body, [data-testid="stAppViewContainer"] {{ background:{COR_BG} !important; font-family:{BASE_FONT}; }}
 .block-container {{ padding-top: 1rem; padding-bottom: 1rem; }}
 </style>
 """, unsafe_allow_html=True)
@@ -45,53 +34,39 @@ def axes_style(fig):
                    linecolor=AXIS, linewidth=1, mirror=True, ticks="outside")
     )
 
-# ========== 1) Localiza o Excel (.xlsx/.xlsm) na raiz ==========
-NOME_BASE = "SABESP - Gestão Contrato Sabesp 00248-25 - 112 Ultronline (3)"
+# ===== 1) Caminho EXATO do Excel =====
+EXCEL_PATH = "./SABESP - Gestão Contrato Sabesp 00248-25 - 112 Ultronline (3).xlsx"
 
-def achar_excel() -> str:
-    pads = (
-        f"./{NOME_BASE}.xlsx", f"./{NOME_BASE}.xlsm",
-        f"./{NOME_BASE}*.xlsx", f"./{NOME_BASE}*.xlsm"
-    )
-    cand = []
-    for p in pads: cand += glob.glob(p)
-    cand = [p for p in cand if os.path.splitext(p)[1].lower() in {".xlsx",".xlsm"}]
-    if not cand:
+# ===== 2) Leitura do Excel (engine explícito) =====
+def ler_excel_xlsx(path: str) -> pd.DataFrame:
+    if not os.path.exists(path):
         st.error(
-            "Excel (.xlsx/.xlsm) não encontrado na raiz do projeto.\n\n"
-            f"Coloque **{NOME_BASE}.xlsx** (ou .xlsm) na raiz."
-        )
-        st.stop()
-    ordem = {".xlsx":0, ".xlsm":1}
-    cand.sort(key=lambda p: ordem.get(os.path.splitext(p)[1].lower(), 9))
-    return cand[0]
-
-# ========== 2) Lê o Excel com engine explícito (openpyxl) ==========
-def ler_excel_openpyxl(path: str) -> pd.DataFrame:
+            "Arquivo Excel não encontrado na raiz do projeto:\n\n"
+            f"**{path}**\n\n"
+            "Confirme que o arquivo está comitado no repositório, no diretório raiz."
+        ); st.stop()
     try:
         import openpyxl  # garante dependência
     except Exception as e:
         st.error(
-            "Dependência ausente p/ .xlsx/.xlsm: **openpyxl**.\n"
-            "No requirements.txt adicione:  openpyxl\n"
-            "Ou instale localmente:        pip install openpyxl\n\n"
+            "Dependência ausente para .xlsx: **openpyxl**.\n"
+            "No requirements.txt adicione:  `openpyxl`\n"
+            "Ou instale localmente:         `pip install openpyxl`\n\n"
             f"Detalhe: {e}"
-        )
-        st.stop()
+        ); st.stop()
     try:
-        return pd.read_excel(path, engine="openpyxl")
+        return pd.read_excel(path, engine="openpyxl")  # primeira planilha
     except Exception as e:
-        st.error(f"Falha ao ler o Excel com openpyxl: {e}")
-        st.stop()
+        st.error(f"Falha ao ler o Excel com openpyxl: {e}"); st.stop()
 
-# ========== 3) Normaliza colunas e valida ==========
+# ===== 3) Normalização e validação de colunas =====
 def norm_col(c: str) -> str:
     c = unicodedata.normalize("NFKD", c).encode("ASCII", "ignore").decode("ASCII")
     return " ".join(c.replace("\n"," ").replace("\r"," ").split()).upper()
 
 def preparar(df_raw: pd.DataFrame) -> pd.DataFrame:
     df = df_raw.rename(columns={c: norm_col(c) for c in df_raw.columns}).copy()
-
+    # aliases -> nomes canônicos
     alias = {
         "LOCAL": ["LOCAL"],
         "CIDADE": ["CIDADE"],
@@ -100,7 +75,6 @@ def preparar(df_raw: pd.DataFrame) -> pd.DataFrame:
         "DATA INSTALAÇÃO ULTRONLINE": ["DATA INSTALACAO ULTRONLINE","DATA INSTALAÇÃO","DATA INSTALACAO"],
         "DATA PLANEJADA": ["DATA PLANEJADA","DATA PREVISTA"]
     }
-    # mapeia colunas presentes
     mapa = {}
     for alvo, opts in alias.items():
         for o in opts:
@@ -131,12 +105,11 @@ def preparar(df_raw: pd.DataFrame) -> pd.DataFrame:
     df["ONLINE"] = ~df["GATEWAY"].str.lower().eq("sem gateway")
     return df
 
-# ========== 4) Carrega SOMENTE da planilha e calcula métricas ==========
-excel_path = achar_excel()
-df_raw = ler_excel_openpyxl(excel_path)
+# ===== 4) Carrega SOMENTE da planilha e calcula métricas =====
+df_raw = ler_excel_xlsx(EXCEL_PATH)
 df = preparar(df_raw)
 
-# Instalados (reais): módulos distintos por dia de instalação
+# Instalados reais (conta MÓDULO distinto por dia de instalação)
 instalado = (
     df.dropna(subset=["MÓDULO","DATA INSTALAÇÃO ULTRONLINE"])
       .drop_duplicates(subset=["MÓDULO","DATA INSTALAÇÃO ULTRONLINE"])
@@ -148,7 +121,7 @@ instalado = (
 instalado["ACUMULADO"] = instalado["INSTALADOS_DIA"].cumsum()
 instalado["DATA_STR"] = instalado["DATA"].dt.strftime("%d/%m/%Y")
 
-# Planejado (opcional)
+# Planejado (opcional, se existir)
 planejado = pd.DataFrame()
 if "DATA PLANEJADA" in df.columns:
     planejado = (
@@ -177,7 +150,7 @@ total_series = df["MÓDULO"].nunique(dropna=True)
 total_online  = int(df.dropna(subset=["MÓDULO"])["ONLINE"].sum())
 total_offline = max(0, total_series - total_online)
 
-# ========== 5) KPIs ==========
+# ===== 5) KPIs =====
 st.markdown(
     f"""
     <div style="color:{COR_TXT}">
@@ -185,7 +158,7 @@ st.markdown(
         Instalações 2Neuron na Sabesp — Planilha
       </h1>
       <div style="opacity:.9; margin:0 0 18px 0; font-size:15px;">
-        Base: <b>{os.path.basename(excel_path)}</b> — módulos únicos: {total_series}
+        Base: <b>{os.path.basename(EXCEL_PATH)}</b> — módulos únicos: {total_series}
       </div>
       <div style="display:flex; gap:28px; flex-wrap:wrap;">
         <div style="background:#FFFFFF; border:1px solid #E9E9EF; border-radius:12px; padding:14px 18px; min-width:220px;">
@@ -206,7 +179,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# ========== 6) Gráficos (100% planilha) ==========
+# ===== 6) Gráficos =====
 def fig_instalados_por_dia():
     fig = go.Figure()
     if not instalado.empty:
@@ -239,10 +212,10 @@ def fig_planejado_por_dia():
     axes_style(fig); return fig
 
 def fig_status():
-    fig = go.Figure(go.Pie(
-        labels=["Online","Offline"], values=[total_online, total_offline],
-        marker=dict(colors=[COR_PRI, COR_ALERTA]), hole=0.5, sort=False
-    ))
+    fig = go.Figure(go.Pie(labels=["Online","Offline"],
+                           values=[total_online, total_offline],
+                           marker=dict(colors=[COR_PRI, COR_ALERTA]),
+                           hole=0.5, sort=False))
     fig.update_layout(title="Status (módulos únicos) — baseado em Gateway")
     return fig
 
@@ -267,7 +240,7 @@ with c4: st.plotly_chart(fig_status(), use_container_width=True, theme="none")
 
 st.plotly_chart(fig_cidade(), use_container_width=True, theme="none")
 
-# ========== 7) Tabelas (derivadas da planilha) ==========
+# ===== 7) Tabelas =====
 cron_real = (
     df.dropna(subset=["DATA INSTALAÇÃO ULTRONLINE"])
       .groupby(["DATA INSTALAÇÃO ULTRONLINE","CIDADE","LOCAL"], as_index=False)["MÓDULO"]
@@ -277,7 +250,6 @@ cron_real = (
 )
 st.dataframe(cron_real, use_container_width=True)
 
-cron_plan = pd.DataFrame()
 if "DATA PLANEJADA" in df.columns:
     cron_plan = (
         df.dropna(subset=["DATA PLANEJADA"])
