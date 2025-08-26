@@ -1,28 +1,28 @@
-# app_min.py
+# app_sabesp.py
 # Lê EXATAMENTE: ./SABESP - Gestão Contrato Sabesp 00248-25 - 112 Ultronline (3).xlsx
-# e plota 1 gráfico: Ultronlines instalados por dia (MÓDULO distinto por DATA INSTALAÇÃO ULTRONLINE).
+# Plota 1 gráfico: Ultronlines instalados por dia (MÓDULO distinto por DATA INSTALAÇÃO ULTRONLINE)
 
 import os, unicodedata
 import pandas as pd
 import streamlit as st
 import plotly.express as px
 
-# ---- evitar qualquer resquício de cache de execuções anteriores ----
+# ---- limpa caches do Streamlit (evita resíduo de código antigo) ----
 try:
     st.cache_data.clear()
     st.cache_resource.clear()
 except Exception:
     pass
 
-st.set_page_config(page_title="Teste rápido — Excel + 1 gráfico", layout="wide")
-st.title("Teste: leitura do Excel + 1 gráfico")
+st.set_page_config(page_title="Teste — Excel + 1 gráfico", layout="wide")
+st.title("Teste rápido: leitura do Excel + 1 gráfico")
 
 # -------- caminho EXATO do arquivo --------
 EXCEL_PATH = "./SABESP - Gestão Contrato Sabesp 00248-25 - 112 Ultronline (3).xlsx"
 
 # -------- checagens simples --------
 if not os.path.exists(EXCEL_PATH):
-    st.error(f"Arquivo não encontrado na raiz do projeto:\n{EXCEL_PATH}")
+    st.error(f"Arquivo não encontrado na raiz: {EXCEL_PATH}")
     st.stop()
 
 # engine obrigatório para .xlsx/.xlsm
@@ -51,7 +51,7 @@ def norm_col(c: str) -> str:
 
 df = df_raw.rename(columns={c: norm_col(c) for c in df_raw.columns}).copy()
 
-# -------- encontrar colunas necessárias --------
+# -------- identificar colunas necessárias --------
 COL_MOD  = next((c for c in ["MÓDULO","MODULO","SERIE","SÉRIE","MÓDULO/ SÉRIE","SERIE/MODULO"] if c in df.columns), None)
 COL_DATA = next((c for c in ["DATA INSTALAÇÃO ULTRONLINE","DATA INSTALACAO ULTRONLINE","DATA INSTALAÇÃO","DATA INSTALACAO"] if c in df.columns), None)
 
@@ -63,7 +63,7 @@ if COL_MOD is None or COL_DATA is None:
     )
     st.stop()
 
-# -------- preparar dados para o gráfico --------
+# -------- preparar dados --------
 df[COL_DATA] = pd.to_datetime(df[COL_DATA], errors="coerce")
 base = df.dropna(subset=[COL_MOD, COL_DATA]).drop_duplicates(subset=[COL_MOD, COL_DATA])
 
@@ -78,13 +78,13 @@ agg["DATA_STR"] = agg["DATA"].dt.strftime("%d/%m/%Y")
 # -------- 1 gráfico --------
 fig = px.bar(
     agg, x="DATA_STR", y="INSTALADOS_DIA",
-    title="Ultronlines instalados por dia (teste — dados da planilha)",
+    title="Ultronlines instalados por dia (dados da planilha)",
     labels={"DATA_STR": "Data de instalação", "INSTALADOS_DIA": "Qtd (módulos distintos)"},
     text="INSTALADOS_DIA"
 )
 fig.update_traces(textposition="outside")
 st.plotly_chart(fig, use_container_width=True)
 
-# (opcional) mostre as primeiras linhas para confirmar leitura
-with st.expander("Ver primeiras linhas da planilha normalizada"):
+# (opcional) visualizar as primeiras linhas para conferir a leitura
+with st.expander("Ver primeiras linhas da planilha (normalizada)"):
     st.dataframe(df.head(20), use_container_width=True)
