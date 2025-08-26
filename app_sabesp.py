@@ -7,7 +7,7 @@ import pandas as pd
 import streamlit as st
 import plotly.express as px
 
-# ---- limpa caches do Streamlit (evita resíduo de código antigo) ----
+# ---- desativa/limpa qualquer resquício de cache (por segurança) ----
 try:
     st.cache_data.clear()
     st.cache_resource.clear()
@@ -15,7 +15,7 @@ except Exception:
     pass
 
 st.set_page_config(page_title="Teste — Excel + 1 gráfico", layout="wide")
-st.title("Teste rápido: leitura do Excel + 1 gráfico")
+st.title("Teste: leitura do Excel + 1 gráfico")
 
 # -------- caminho EXATO do arquivo --------
 EXCEL_PATH = "./SABESP - Gestão Contrato Sabesp 00248-25 - 112 Ultronline (3).xlsx"
@@ -25,19 +25,19 @@ if not os.path.exists(EXCEL_PATH):
     st.error(f"Arquivo não encontrado na raiz: {EXCEL_PATH}")
     st.stop()
 
-# engine obrigatório para .xlsx/.xlsm
+# -------- engine obrigatório para .xlsx/.xlsm --------
 try:
-    import openpyxl  # noqa: F401
+    import openpyxl  # garante presença do pacote
 except Exception as e:
     st.error(
-        "Pacote **openpyxl** não está disponível para ler .xlsx.\n"
+        "Pacote **openpyxl** não está instalado e é necessário para ler .xlsx.\n"
         "No requirements.txt inclua:  openpyxl\n"
         "Ou instale localmente:       pip install openpyxl\n\n"
         f"Detalhe: {e}"
     )
     st.stop()
 
-# -------- ler excel (primeira planilha) --------
+# -------- ler excel (primeira planilha) COM ENGINE EXPLÍCITO --------
 try:
     df_raw = pd.read_excel(EXCEL_PATH, engine="openpyxl")
 except Exception as e:
@@ -85,6 +85,6 @@ fig = px.bar(
 fig.update_traces(textposition="outside")
 st.plotly_chart(fig, use_container_width=True)
 
-# (opcional) visualizar as primeiras linhas para conferir a leitura
+# (opcional) visualizar primeiras linhas para confirmar leitura
 with st.expander("Ver primeiras linhas da planilha (normalizada)"):
     st.dataframe(df.head(20), use_container_width=True)
