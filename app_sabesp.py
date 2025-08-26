@@ -1,13 +1,22 @@
 # app_sabesp.py
+# Requisitos:
+#   streamlit, pandas, plotly, openpyxl
+# Obs: lê SOMENTE .xlsx/.xlsm na raiz. Sem uploader, sem registros manuais.
+
 import os, glob, unicodedata
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.io as pio
 import streamlit as st
 
-# =========================
-# Aparência fixa e layout
-# =========================
+# ========== Desativa/limpa qualquer cache antigo ==========
+try:
+    st.cache_data.clear()
+    st.cache_resource.clear()
+except Exception:
+    pass
+
+# ========== Aparência fixa ==========
 pio.templates.default = None
 COR_BG, COR_TXT = "#F8F8FF", "#2D2D2D"
 COR_PRI, COR_SEC, COR_ALERTA = "#6A0DAD", "#8A2BE2", "#E76F51"
@@ -36,74 +45,46 @@ def axes_style(fig):
                    linecolor=AXIS, linewidth=1, mirror=True, ticks="outside")
     )
 
-# =========================
-# 1) Localizar o Excel na raiz
-# =========================
+# ========== 1) Localiza o Excel (.xlsx/.xlsm) na raiz ==========
 NOME_BASE = "SABESP - Gestão Contrato Sabesp 00248-25 - 112 Ultronline (3)"
 
 def achar_excel() -> str:
     pads = (
-        f"./{NOME_BASE}.xlsx", f"./{NOME_BASE}.xlsm", f"./{NOME_BASE}.xls",
-        f"./{NOME_BASE}*.xlsx", f"./{NOME_BASE}*.xlsm", f"./{NOME_BASE}*.xls"
+        f"./{NOME_BASE}.xlsx", f"./{NOME_BASE}.xlsm",
+        f"./{NOME_BASE}*.xlsx", f"./{NOME_BASE}*.xlsm"
     )
     cand = []
     for p in pads: cand += glob.glob(p)
-    cand = [p for p in cand if os.path.splitext(p)[1].lower() in {".xlsx",".xlsm",".xls"}]
+    cand = [p for p in cand if os.path.splitext(p)[1].lower() in {".xlsx",".xlsm"}]
     if not cand:
         st.error(
-            "Excel não encontrado na raiz do projeto.\n\n"
-            f"Coloque **{NOME_BASE}.xlsx** (ou .xlsm/.xls) na raiz."
+            "Excel (.xlsx/.xlsm) não encontrado na raiz do projeto.\n\n"
+            f"Coloque **{NOME_BASE}.xlsx** (ou .xlsm) na raiz."
         )
         st.stop()
-    ordem = {".xlsx":0, ".xlsm":1, ".xls":2}
+    ordem = {".xlsx":0, ".xlsm":1}
     cand.sort(key=lambda p: ordem.get(os.path.splitext(p)[1].lower(), 9))
     return cand[0]
 
-# =========================
-# 2) Ler o Excel COM engine explícito
-# =========================
-def ler_excel(path: str) -> pd.DataFrame:
-    ext = os.path.splitext(path)[1].lower()
+# ========== 2) Lê o Excel com engine explícito (openpyxl) ==========
+def ler_excel_openpyxl(path: str) -> pd.DataFrame:
     try:
-        if ext in {".xlsx", ".xlsm"}:
-            try:
-                import openpyxl  # garante que o pacote existe
-            except Exception as e:
-                st.error(
-                    "Dependência ausente p/ .xlsx/.xlsm: **openpyxl**.\n"
-                    "No requirements.txt adicione:  openpyxl\n"
-                    "Ou instale localmente:        pip install openpyxl\n\n"
-                    f"Detalhe: {e}"
-                ); st.stop()
-            return pd.read_excel(path, engine="openpyxl")
-
-        if ext == ".xls":
-            try:
-                import xlrd
-                # precisa ser 1.2.0 para ler .xls
-                parts = xlrd.__version__.split(".")
-                major, minor = int(parts[0]), int(parts[1]) if len(parts) > 1 else 0
-                if (major, minor) > (1, 2):
-                    st.error("Para .xls use **xlrd==1.2.0**. No requirements.txt:  xlrd==1.2.0")
-                    st.stop()
-            except Exception as e:
-                st.error(
-                    "Dependência ausente p/ .xls: **xlrd==1.2.0**.\n"
-                    "No requirements.txt:  xlrd==1.2.0\n"
-                    "Ou instale:           pip install xlrd==1.2.0\n\n"
-                    f"Detalhe: {e}"
-                ); st.stop()
-            return pd.read_excel(path, engine="xlrd")
-
-        st.error(f"Extensão não suportada: {ext}. Use .xlsx/.xlsm ou .xls.")
-        st.stop()
+        import openpyxl  # garante dependência
     except Exception as e:
-        st.error(f"Erro ao ler o Excel com o engine adequado: {e}")
+        st.error(
+            "Dependência ausente p/ .xlsx/.xlsm: **openpyxl**.\n"
+            "No requirements.txt adicione:  openpyxl\n"
+            "Ou instale localmente:        pip install openpyxl\n\n"
+            f"Detalhe: {e}"
+        )
+        st.stop()
+    try:
+        return pd.read_excel(path, engine="openpyxl")
+    except Exception as e:
+        st.error(f"Falha ao ler o Excel com openpyxl: {e}")
         st.stop()
 
-# =========================
-# 3) Normalizar colunas e validar
-# =========================
+# ========== 3) Normaliza colunas e valida ==========
 def norm_col(c: str) -> str:
     c = unicodedata.normalize("NFKD", c).encode("ASCII", "ignore").decode("ASCII")
     return " ".join(c.replace("\n"," ").replace("\r"," ").split()).upper()
@@ -119,7 +100,7 @@ def preparar(df_raw: pd.DataFrame) -> pd.DataFrame:
         "DATA INSTALAÇÃO ULTRONLINE": ["DATA INSTALACAO ULTRONLINE","DATA INSTALAÇÃO","DATA INSTALACAO"],
         "DATA PLANEJADA": ["DATA PLANEJADA","DATA PREVISTA"]
     }
-    # encontra colunas da planilha
+    # mapeia colunas presentes
     mapa = {}
     for alvo, opts in alias.items():
         for o in opts:
@@ -136,7 +117,6 @@ def preparar(df_raw: pd.DataFrame) -> pd.DataFrame:
             + ", ".join(df.columns)
         ); st.stop()
 
-    # renomeia para canônico
     df = df.rename(columns={mapa[k]: k for k in mapa})
 
     # tipos e limpeza
@@ -151,11 +131,9 @@ def preparar(df_raw: pd.DataFrame) -> pd.DataFrame:
     df["ONLINE"] = ~df["GATEWAY"].str.lower().eq("sem gateway")
     return df
 
-# =========================
-# 4) Carregar SOMENTE da planilha e calcular métricas
-# =========================
+# ========== 4) Carrega SOMENTE da planilha e calcula métricas ==========
 excel_path = achar_excel()
-df_raw = ler_excel(excel_path)
+df_raw = ler_excel_openpyxl(excel_path)
 df = preparar(df_raw)
 
 # Instalados (reais): módulos distintos por dia de instalação
@@ -199,9 +177,7 @@ total_series = df["MÓDULO"].nunique(dropna=True)
 total_online  = int(df.dropna(subset=["MÓDULO"])["ONLINE"].sum())
 total_offline = max(0, total_series - total_online)
 
-# =========================
-# 5) KPIs
-# =========================
+# ========== 5) KPIs ==========
 st.markdown(
     f"""
     <div style="color:{COR_TXT}">
@@ -230,9 +206,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# =========================
-# 6) Gráficos (100% planilha)
-# =========================
+# ========== 6) Gráficos (100% planilha) ==========
 def fig_instalados_por_dia():
     fig = go.Figure()
     if not instalado.empty:
@@ -293,9 +267,7 @@ with c4: st.plotly_chart(fig_status(), use_container_width=True, theme="none")
 
 st.plotly_chart(fig_cidade(), use_container_width=True, theme="none")
 
-# =========================
-# 7) Tabelas (derivadas da planilha)
-# =========================
+# ========== 7) Tabelas (derivadas da planilha) ==========
 cron_real = (
     df.dropna(subset=["DATA INSTALAÇÃO ULTRONLINE"])
       .groupby(["DATA INSTALAÇÃO ULTRONLINE","CIDADE","LOCAL"], as_index=False)["MÓDULO"]
